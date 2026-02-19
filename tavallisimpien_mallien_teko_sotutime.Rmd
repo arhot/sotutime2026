@@ -1,0 +1,162 @@
+---
+title: "Tavallisimmat mallit"
+output: html_document
+---
+
+# Työkalujen lataus
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(labelled)
+library(broom)
+library(writexl)
+library(sjstats)
+library(sostieteidentaulukointityylit)
+
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+```
+
+# Faktorianalyysi
+
+## Mallinnus ja taulukointi
+
+Ekstrahointitapa: maximum likelihood (`fm="ml"`). Rotaatio: varimax. 
+Faktorien määrä (`nfactors`) on sisällöllinen valinta – kokeile useampaa ja valitse selkein ratkaisu.
+
+```{r, rows.print=25}
+schwartzin_arvot <- fa(ESS2023_Suomi |> select(starts_with("H")),
+                       nfactors = 4, fm = "ml", rotate = "varimax")
+
+faktoritaulukko <- tee_faktorianalyysitaulukko(schwartzin_arvot) |>
+  rename(Menestys = ML3)   # nimeä kaikki faktorit tulkintasi mukaan
+
+faktoritaulukko
+
+write_xlsx(faktoritaulukko, "faktorianalyysitaulukko.xlsx")
+```
+
+## Faktoripistemuuttujat aineistoon
+
+Faktoripistemuuttujat ovat standardoituja (ka ≈ 0, sd = 1).
+
+```{r}
+faktoripisteet <- schwartzin_arvot$scores |>
+  as_tibble() |>
+  rename(Menestys = ML3)   # toista samat uudelleennimeämiset kuin yllä
+
+ESS2023_Suomi <- ESS2023_Suomi |>
+  select(-matches(names(faktoripisteet))) |>
+  bind_cols(faktoripisteet)
+```
+
+## Faktoripistemuuttujan suunnan kääntö (tarvittaessa)
+
+Jos pieni arvo tarkoittaa enemmän, kerro muuttuja -1:llä.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Menestys_isompi_arvostaa_enemman = Menestys * -1)
+```
+
+---
+
+# Lineaarinen regressio
+
+## Mallinnukset 
+
+Malli lisätään yksi selittäjä kerrallaan. Kaava: `selitettava ~ selittaja1 + selittaja2`.
+
+```{r}
+m1 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman ~ Koulutus_vuosina, data = _)
+regressiotaulukko1 <- tee_regressiotaulukko(m1)
+regressiotaulukko1
+
+m2 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman ~ Koulutus_vuosina + Sukupuoli, data = _)
+regressiotaulukko2 <- tee_regressiotaulukko(m2)
+regressiotaulukko2
+
+m3 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman ~ Koulutus_vuosina + Sukupuoli + Ikä, data = _)
+regressiotaulukko3 <- tee_regressiotaulukko(m3)
+regressiotaulukko3
+```
+
+## Regressiotaulukot samassa ja tallennus Exceliin
+
+```{r}
+# Kaikki mallit samassa taulukossa
+taulukot_yhdessa <- regressiotaulukko1 |>
+  bind_rows(regressiotaulukko2) |>
+  bind_rows(regressiotaulukko3)
+
+taulukot_yhdessa
+
+write_xlsx(taulukot_yhdessa, "regressiotaulukko.xlsx")
+```
+
+Regressioanalyysin yhteydessä raportoidaan yleensä myös hajontakuvio regressiosuoralla - tämän ohje visualisaatio-ohjeessa.
+---
+
+# Varianssianalyysi (ANOVA)
+
+Varianssianalyysi on regressioanalyysi, jossa kaikki selittäjät ovat luokiteltuja. `*`-merkki lisää sekä päävaikutukset että yhdysvaikutuksen.
+
+Varianssianalyysissa raportoidaan yleensä keskiarvotaulukko sekä -kuvio.
+```{r, rows.print=30}
+
+keskiarvotaulukko <- ESS2023_Suomi |>
+  group_by(Sukupuoli, Koulutusaste) |>
+  summarize(
+    n = n(),
+    Keskiarvo = mean(Menestys, na.rm = TRUE),
+    Keskihajonta = sd(Menestys, na.rm = TRUE),
+    Luottamusvalin_alaraja = Keskiarvo - 1.96 * Keskihajonta / sqrt(n),
+    Luottamusvalin_ylaraja = Keskiarvo + 1.96 * Keskihajonta / sqrt(n)
+  ) |>
+  mutate_if(is.numeric, round, 2)
+
+keskiarvotaulukko |> na.omit()
+
+write_xlsx(keskiarvotaulukko |> na.omit(), "keskiarvotaulukko.xlsx")
+```
+
+
+## Kuvio
+
+`position_dodge()` siirtää saman x-arvon ryhmiä sivulle niin, etteivät mene päällekkäin.
+
+```{r}
+keskiarvotaulukko |> na.omit() |>
+  ggplot(aes(x = Koulutusaste, y = Keskiarvo, color = Sukupuoli)) +
+  geom_point(position = position_dodge(0.5)) +
+  geom_errorbar(
+    aes(ymin = Luottamusvalin_alaraja, ymax = Luottamusvalin_ylaraja),
+    position = position_dodge(0.5)
+  ) +
+  labs(x = "Koulutusaste", y = "Keskiarvo", color = "Sukupuoli")
+```
+
+## Tilastollinen testaus ja post hoc -testit
+
+Varianssianalyysin tilastollisessa testauksessa raportoidaan yleensä F-testi, p-arvo ja selitysosuus (eta²). Post hoc -testeillä testataan ryhmien välisiä eroja tarkemmin.
+APAn mukainen raportointi: F(df_muuttuja, df_residuaali) = testisuure, p < .001, eta² = selitysosuus.
+
+```{r}
+anova_malli <- lm(Menestys ~ Sukupuoli * Koulutusaste, data = ESS2023_Suomi)
+
+anova_stats(anova_malli) |> select(term, df, statistic, p.value, partial.etasq)
+```
+
+## Regressiotaulukko mallista
+
+## Post hoc -testit (TukeyHSD)
+
+Kaikki ryhmien väliset erot testattuna. Nosta tekstiin mielenkiintoisimmat havainnot.
+
+```{r}
+anova_malli |> aov() |> TukeyHSD()
+```

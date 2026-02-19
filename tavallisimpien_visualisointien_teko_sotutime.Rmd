@@ -1,0 +1,243 @@
+---
+title: "Tavallisimmat visualisoinnit"
+output: html_document
+---
+
+# Työkalujen lataus
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(labelled)
+library(broom)
+library(writexl)
+library(sjstats)
+library(sostieteidentaulukointityylit)
+
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+```
+
+ggplot on R:n suosituin visualisointipaketti. Sillä voi tehdä kaikenlaisia kuvioita, mutta tässä käydään läpi vain muutama peruskuvio, jotka sopivat useimpiin tilanteisiin.
+ggplot-kuvio rakennetaan kerroksittain: 
+
+Perusrakenteena kuviolle annetaan aineisto ja tarvittavat muuttujat:
+aineisto |> ggplot(aes(x = ..., y = ..., color = ..., fill=..., shape=...))
+
+aineiston ja ggplot-komennon välissä voit tehdä väliaikaisia muuttujamuunnoksia kuviota varten. Nämä eivät tallennu aineistoon! Tässä ohjeessa tehdään aina muuttujamuunnokset osana kuviokomentoa, mutta voit toki tehdä ne ensin ja muokata aineistoa.
+
+Voit lisätä kuvioon kaikenlaista +-merkillä. Muista, että plusmerkin pitää olla edellisen komennon perässä samalla rivillä - muuten R luulee komennon päättyvän.
+
+tämän jälkeen lisätään kuvioelementtejä, kuten pylväät, pisteet tai viivat:
++ geom_bar()   # pylväskuvio
++ geom_histogram() # histogrammi
++ geom_point() # hajontakuvio - voit ravistaa pisteitä hieman, jotta päällekkäiset erottuvat paremmin: position = "jitter"
++ geom_smooth(method = "lm") # regressiosuora
++ geom_errorbar() # virhepalkit, vaatii ylimääräisiä määrittelyitä
+
+Voit lisätä kuvioon otsikoita:
++ labs(title = "Otsikko", subtitle= "Alaotsikko", x = "x-akselin nimi", y = "y-akselin nimi", color = "Värimuuttujan nimi")
+
+Voit kääntää kuvion kyljelleen (helpottaa pitkien luokkanimien kanssa):
++ coord_flip()
+
+Voit tehdä minkä tahansa kuvion kuvion erikseen monelle ryhmälle:
++ facet_wrap(~Ryhmämuuttuja) # erillinen paneeli jokaiselle ryhmälle
+
+Voit rajata akseleita:
++ xlim(0, 100) # x-akseli 0-100
++ ylim(0, 100) # y-akseli 0-100
+
+Voit muuttaa kuvion ulkoasua:
++ theme_minimal() # siisti tausta
++ theme_classic() # klassinen ulkoasu
+
+Lisää ulkoasuja voit ladata esim. paketista ggthemes.
+
+---
+
+# Pylväskuvio (bar chart)
+
+Sopii luokitelluille muuttujille. x-akselille luokiteltu muuttuja.
+
+```{r}
+ESS2023_Suomi |> mutate(Sukupuoli = as_factor(Sukupuoli)) |>
+  ggplot(aes(x = Sukupuoli)) +
+  geom_bar() +
+  labs(x = "Sukupuoli", y = "Lukumäärä")
+```
+
+## Vaakaan käännetty – paljon luokkia
+
+`coord_flip()` kääntää kuvion, jolloin pitkät luokkien nimet mahtuvat paremmin.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(puolue = as_factor(B14) |> fct_lump(n = 8) |> fct_infreq()) |>
+  ggplot(aes(x = puolue)) +
+  geom_bar() +
+  labs(x = "Puolue", y = "Lukumäärä") +
+  coord_flip()
+```
+
+## Ryhmitelty pylväskuvio – kaksi luokiteltua
+
+`fill` värikoodaa toisen muuttujan, `position = "dodge"` asettaa pylväät vierekkäin.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Sukupuoli = as_factor(Sukupuoli),
+         Koulutusaste = cut(F15, breaks = c(0, 3, 8, 15),
+                            labels = c("1. aste", "2. aste", "3. aste"))) |>
+  ggplot(aes(x = Koulutusaste, fill = Sukupuoli)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Koulutusaste", y = "Lukumäärä", fill = "Sukupuoli")
+```
+
+---
+
+# Histogrammi
+
+Sopii jatkuville muuttujille. Näyttää jakauman muodon.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi) |>
+  ggplot(aes(x = Ikä)) +
+  geom_histogram() +
+  labs(x = "Ikä", y = "Lukumäärä")
+```
+
+## Histogrammi luokittain
+
+`facet_wrap()` tekee erillisen paneelin jokaiselle ryhmälle.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi,
+         Sukupuoli = as_factor(Sukupuoli)) |>
+  ggplot(aes(x = Ikä)) +
+  geom_histogram() +
+  facet_wrap(~Sukupuoli) +
+  labs(x = "Ikä", y = "Lukumäärä")
+```
+
+---
+
+# Hajontakuvio (scatterplot)
+
+Sopii kahden jatkuvan muuttujan yhteyden tarkasteluun.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi) |>
+  ggplot(aes(x = Ikä, y = A1_min)) +
+  geom_point() +
+  labs(x = "Ikä", y = "Uutisten seuraaminen (min)")
+```
+
+## Jitter – päällekkäisten pisteiden hajauttaminen
+
+`position = "jitter"` siirtää pisteitä hieman satunnaisesti niin, että päällekkäiset erottuvat.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi) |>
+  ggplot(aes(x = Ikä, y = A1_min)) +
+  geom_point(position = "jitter") +
+  labs(x = "Ikä", y = "Uutisten seuraaminen (min)")
+```
+
+## Regressiosuora hajontakuvioon
+
+`geom_smooth(method = "lm")` lisää lineaarisen trendiviivan luottamusväleineen.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi,
+         Koulutus_vuosina = F16) |>
+  ggplot(aes(x = Koulutus_vuosina, y = A1_min)) +
+  geom_point(position = "jitter") +
+  geom_smooth(method = "lm") +
+  labs(x = "Koulutus (vuosia)", y = "Uutisten seuraaminen (min)")
+```
+
+## Hajontakuvio värikoodattuna ryhmällä
+
+`color` värikoodaa pisteet luokitellun muuttujan mukaan. Yksi regressiosuora per ryhmä.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi,
+         Sukupuoli = as_factor(Sukupuoli)) |>
+  ggplot(aes(x = Ikä, y = A1_min, color = Sukupuoli)) +
+  geom_point(position = "jitter") +
+  geom_smooth(method = "lm") +
+  labs(x = "Ikä", y = "Uutisten seuraaminen (min)", color = "Sukupuoli")
+```
+
+---
+
+# Pisteet ja luottamusvälit – varianssianalyysin kuvio
+
+Tämä kuvio näyttää ryhmäkeskiarvot pisteinä ja 95 %:n luottamusvälit viiksinä.
+Rakennetaan ensin keskiarvotaulukko `group_by()` + `summarize()`-komennoilla.
+
+```{r}
+ESS2023_Suomi_muokattu <- ESS2023_Suomi |>
+  mutate(Sukupuoli = as_factor(Sukupuoli),
+         Koulutusaste = cut(F15, breaks = c(0, 3, 8, 15),
+                            labels = c("1. aste", "2. aste", "3. aste")),
+         Menestys = scale(H1a + H1b, scale = FALSE))  # esimerkki selitettävästä
+
+keskiarvotaulukko <- ESS2023_Suomi_muokattu |>
+  group_by(Sukupuoli, Koulutusaste) |>
+  summarize(
+    n = n(),
+    Keskiarvo = mean(Menestys, na.rm = TRUE),
+    Keskihajonta = sd(Menestys, na.rm = TRUE),
+    Luottamusvalin_alaraja = Keskiarvo - 1.96 * Keskihajonta / sqrt(n),
+    Luottamusvalin_ylaraja = Keskiarvo + 1.96 * Keskihajonta / sqrt(n)
+  ) |>
+  mutate_if(is.numeric, round, 2)
+
+keskiarvotaulukko |> na.omit()
+```
+
+## Kuvio
+
+`position_dodge()` siirtää saman x-arvon ryhmiä sivulle niin, etteivät mene päällekkäin.
+
+```{r}
+keskiarvotaulukko |> na.omit() |>
+  ggplot(aes(x = Koulutusaste, y = Keskiarvo, color = Sukupuoli)) +
+  geom_point(position = position_dodge(0.5)) +
+  geom_errorbar(
+    aes(ymin = Luottamusvalin_alaraja, ymax = Luottamusvalin_ylaraja),
+    position = position_dodge(0.5)
+  ) +
+  labs(x = "Koulutusaste", y = "Keskiarvo", color = "Sukupuoli")
+```
+
+---
+
+# Kuvion viimeistely
+
+Kaikkiin kuvioihin voi lisätä otsikon (`title`), alaotsikon (`subtitle`) ja akselien nimet `labs()`-komennolla.
+`theme_minimal()` antaa siistin taustan.
+
+```{r}
+ESS2023_Suomi |>
+  mutate(Ikä = 2023 - Syntymävuosi) |>
+  ggplot(aes(x = Ikä)) +
+  geom_histogram() +
+  labs(
+    title = "Vastaajien ikäjakauma",
+    x = "Ikä (vuosia)",
+    y = "Lukumäärä"
+  ) +
+  theme_minimal()
+```
