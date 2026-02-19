@@ -1,7 +1,7 @@
 # Sosiaalitieteiden tilastomenetelmät – R-harjoitukset 2026
 
 Tämä kansio sisältää kurssin R-harjoitustiedostot sekä koontitiedostot yleisimmistä analyyseista.
-Aineistona käytetään European Social Survey -kyselyä (ESS 2023, Suomen otos).
+Aineistona esimerkeissä käytetään European Social Survey -kyselyä (ESS 2023, Suomen otos). Kysely on suomennettu HY:n kurssia varten. Englanninkielisen aineiston voi ladata ESS Data Portal -palvelusta. Jos haluat suomennetun aineiston käyttöösi, kysy sähköpostitse.
 
 ---
 
@@ -32,9 +32,7 @@ Nämä tiedostot kokoavat harjoitusten tärkeimmät koodit lyhyeen muotoon kotii
 
 | Tiedosto | Kuvaus |
 |---|---|
-| `ESS2023_Suomi.sav` | Alkuperäinen ESS 2023 -aineisto (Suomi), SPSS-muodossa |
-| `ESS2016.sav` | Vanhempi ESS 2016 -aineisto vertailukäyttöön |
-| `app.R` | Shiny-sovellus |
+| `ESS2023_Suomi.sav` | Alkuperäinen ESS 2023 -aineisto (Suomi), SPSS-muodossa | Ei jaettu tässä, kysy sähköpostitse.
 | `sotutime2024.Rproj` | RStudio-projektitiedosto – avaa tämä RStudiossa |
 
 ---
@@ -53,7 +51,11 @@ install.packages(c("tidyverse", "forcats", "haven", "janitor",
                    "writexl", "sjstats", "pwr"))
 ```
 
-Kurssipaketti `sostieteidentaulukointityylit` asennetaan erikseen kurssin ohjeiden mukaan.
+Kurssipaketti `sostieteidentaulukointityylit` asennetaan GitHubista:
+
+```r
+remotes::install_github("arhot/sostieteidentaulukointityylit")
+```
 
 ---
 
