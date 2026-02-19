@@ -1,0 +1,286 @@
+---
+title: 'Harjoitus 5: muuttujamuunnokset luokitelluilla muuttujilla'
+author: "Arho Toikka""
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Aineiston ja työkalujen lataus
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Aineiston avaaminen
+
+Jos on tarpeen avata aineisto, niin tässä vaiheessa sen voi tehdä. Jos viimeksi tallensit aineiston jossa oli muokkauksia niin avaa se. Ja tosiaan jos on jo auki aineisto niin ei tarvitse uudestaan.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+# tai
+ESS2023_Suomi <- read_sav("ESS2023_Suomi_editoitu.sav")
+```
+
+# Faktoripistemuuttujien lisääminen uudestaan
+
+Jos faktoripisteet on aineistossa tallessa tai lataat muokatun aineiston niin tätä ei tarvitse, mutta Taas jos ei ole faktoripistemuuttujia tallessa niin voi avata harjoituksen 3 ja suorittaa koodit siellä. Minä kopioin tähän koodit niin on kaikki samassa. 
+
+```{r}
+schwartzin_arvot <- fa(ESS2023_Suomi |> select(starts_with("h")), nfactors=4, fm="ml", rotate ="varimax")
+faktoripisteet <- schwartzin_arvot$scores |> as_tibble() |> rename(Menestys = ML3)
+ESS2023_Suomi <- ESS2023_Suomi |> select(-matches(names(faktoripisteet))) |> bind_cols(faktoripisteet)
+```
+
+Käännetään myös.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Menestys_isompi_arvostaa_enemman = Menestys * -1 )
+
+```
+
+
+## Faktorit eli luokitellut muuttujat
+
+Aineistoissa voi olla eri tyyppisiä muuttujia - tärkeimpänä erottelu jatkuviin ja luokiteltuihin. R-slangilla jatkuva on numeric ja luokiteltu factor. European Social Survey on toimitettu sellaisessa muodossa, että kaikki muuttujat ovat jatkuvia (mutta luokkien nimet on tallennettu aineistoon). 
+
+Siksi luokitellut muuttujat pitää usein muuttaa oikeaan muotoon. as_factor() muuttaa muuttujan numeerisesta luokitelluksi.
+
+Funktiot reagoivat eri tavalla erilaisiin muuttujiin -  kun R tietää, että muuttuja on luokiteltu, esimerkiksi summaryn tuotos on erilainen.
+
+```{r}
+summary(ESS2023_Suomi$F14)
+
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Asuinymparisto = as_factor(F14))
+
+summary(ESS2023_Suomi$Asuinymparisto)
+```
+
+
+Luokitellun muuttujan tietoihin on kirjattu kaikki mahdolliset arvot, joita se voi saada. 
+
+forcats -paketin fct_ -alkuiset muuttujat muokkaavat faktoreita eri tavoin. 
+
+fct_recode() uudelleennimeää ja yhdistelee luokkia. Logiikka on "Uusi luokka" = "Vanha luokka". Jos et kirjaa jollekin luokalle mitään, se säilyy entisellään. Yhdistäminen tapahtuu antamalla useammalle vanhalle luokalle sama uusi nimi. Puuttuvaksi kokonaisen luokan saa antamalla uudeksi arvoksi NULL (ilman lainausmerkkejä).
+ 
+
+```{r}
+
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Asuinalue = F14 |> as_factor() |> fct_recode("Suurkaupunki"   = "Suuri kaupunki",
+  "Taajama" = "Suuren kaupungin lähiö tai lähiseutu",
+  "Pieni kaupunki" = "Pieni tai keskikokoinen kaupunki tai kunta",
+  "Pieni kaupunki" = "Pienempi taajama tai kunta",
+  "Maaseutu" = "Maaseutu / haja-asutusalue"
+  ))
+
+summary(ESS2023_Suomi$Asuinalue)
+
+```
+
+Faktoreille histogrammia vastaava kuvio on pylväskuvio eli bar chart. Sama asia, mutta luokkien nimet tulevat näkyviin.
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=Asuinalue)) +
+  geom_bar()
+```
+
+Otetaan vielä muutama muu kätevä toimenpide. Kysymykseen "mikä puolue tuntuu läheisimmältä" on aika monta vaihtoehtoa, ja olisi aika vaiva nimetä jokainen niistä. fct_lump() yhdistää pienimmät kategoriaan muu. Yhdistettävien luokkien määrän voi määritellä kahdella tavalla: n kertoo kuinka monta luokkaa säästetään (muun ja puuttuvan lisäksi), prop kertoo kuinka monta prosenttia pienimmän luokan pitää vähintään olla. 
+
+Otetaan vaikka 8 puoluetta näkyviin, ja saman tien järjestetään pienimmästä suurimpaan komennolla fct_infreq().
+
+
+
+```{r}
+summary(ESS2023_Suomi$B14) 
+ 
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(puolue_kaikki = as_factor(B14))
+
+summary(ESS2023_Suomi$puolue_kaikki)
+
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(puolue = puolue_kaikki |> fct_lump(n = 8) |> fct_infreq())
+
+summary(ESS2023_Suomi$puolue) 
+
+
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(puolue_sis_ei_aanestaneet = puolue_kaikki |> 
+           fct_lump(n = 8, other_level = "Muu puolue") |> fct_na_value_to_level("Ei äänestänyt") |> fct_infreq())
+
+summary(ESS2023_Suomi$puolue_sis_ei_aanestaneet) 
+```
+
+
+## Luokitellun muuttujan esittely
+
+summary() listaa kuinka monta vastaaja kussakin luokassa on, mutta usein halutaan esitellä vähän tarkemmin, esimerkiksi prosentteina. tabyl() tekee yhden version tällaisesta taulukosta. 
+
+Todennäköisesti monet teistä tekevät loppuraportit Wordillä, joten lisätään tähän nyt komento, joka tekee copy&pastesta wordiin helppoa: as_tibble()
+
+```{r}
+ESS2023_Suomi |> tabyl(puolue_sis_ei_aanestaneet) |> adorn_pct_formatting(digits = 2) |> as_tibble()
+```
+
+
+Vieläkin tekstiä tulee vähän paljon jos tekee tavallisen pylväskuvion - käännetään siis koko kuva coord_flip():llä. Otsikkokin vaihtaa puolta!
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=puolue)) +
+  geom_bar() +
+  labs(x="Mitä puoluetta äänestitte") +
+  coord_flip() 
+```
+
+
+## Numeroilla operointi: jatkuvasta luokiksi ja cut()
+
+Usein kun on paljon ryhmiä ja ryhmät ovat järjestyksessä, on helpointa tehdä luokittelu alkuperäisten numeroiden perusteella. Esimerkiksi eri tyyppisiä koulutuksia suorittaineiden osuudet muuttujassa f15 voi jakaa näin.
+
+Tähän sopii komento cut(). 
+
+Leikkaaminen vaatii rajojen tai leikkauspisteiden määrittelyn argumentilla breaks. leikkauspisteet ovat luokkien ylärajat ja rajalla oleva arvo kuuluu pienempään luokkaan (oletuksena). Tämä saa näyttää vähän hassulta, etenkin ensimmäisen numeron osalta: ensimmäisen numeron pitää olla pienempi kuin muuttujan pienin arvo, koska muuten pienin arvo leikkautuisi ulos. Esimerkin voi siis lukea vaikka niin, että kaikki arvot väliltä 0.01-3 menevät ensimmäiseen luokkaan, 3.01-8 toiseen luokkaan..
+
+Kaikki ensimmäiseen leikkauspisteeseen asti ja kaikki viimeisen leikkauspisteen yläpuolella muuttuu automaattisesti puuttuvaksi. 
+
+Ryhmille voi määritellä myös nimet saman tien argumentilla labels. 4 leikkauspisteen välissä on kolme luokkaa, joten nyt nimiä tulee kolme - aina yksi vähemmän kuin leikkauspisteitä.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Koulutusaste = cut(F15, breaks=c(0, 3, 8, 15), labels=c("1. aste", "2. aste", "3.aste tai korkeampi")))
+ 
+ESS2023_Suomi |> tabyl(Koulutusaste)  |> adorn_pct_formatting(digits = 2) |> as_tibble()
+```
+
+
+
+
+
+
+
+## Ristiintaulukko
+
+Ristiintaulukko on perinteinen konsti tarkastella kahden luokitellun muuttujan yhteyttä. tabyl() tekee myös ristiintaulukon. Taulukolle voi tehdä myös khi-toiseen -testin, esimerkiksi komennolla chisq.test(). 
+
+```{r}
+ESS2023_Suomi |>
+  tabyl(puolue, Koulutusaste, show_na=F) |> as_tibble()
+
+ESS2023_Suomi |>
+  tabyl(puolue, Koulutusaste, show_na=F) |> chisq.test() 
+
+```
+
+Erityisesti tärkeä on prosenttien laskeminen, johon pitää tietysti valita mistä prosentit lasketaan. Nyt voisi laskea kuinka monta prosenttia kokoomuksen äänestäjistä on saanut 1. asteen koulutuksen, kuinka monta prosenttia 1. asteen koulutuksen saaneista äänestää kokoomusta, tai kuinka monta prosenttia kaikista on 1. asteen koulutuksen saaneita kokoomuksen äänestäjiä. 
+
+```{r}
+ESS2023_Suomi |>
+  tabyl(puolue, Koulutusaste, show_na=F) |> 
+  adorn_totals(c("row")) |>
+  adorn_percentages("col") |>
+  adorn_pct_formatting(digits=2) |> as_tibble()
+```
+
+
+## Analyysi 2: Itsenäinen osuus
+
+1. Tutkimussuunnitelmassa kehotettiin valitsemaan kaksi luokiteltua selittäjää. Pohditaan nyt niiden (mahdollisia) käsittelyjä: pitääkö luokitella uudelleen, yhdistää ryhmiä, tai vaikka jakaa jatkuva muuttuja ensin luokiksi. Varianssianalyysissa ensi viikolla tullaan tarkastelemaan näiden ryhmien välisiä eroja, ja nyt kannattaa työstää ryhmät niin, että ihan pieniä ryhmiä ei ole, ja muutenkin ryhmiä kannattaa olla hallittava määrä - 2-5 ryhmää per luokitteleva muuttuja on varmaan paras, yli 8 ryhmää tekee tulkinnasta jo vähän raskasta.
+
+2. Tee tarvittavat muuttujamuunnokset. 
+
+Jos valitsemissasi muuttujissa on jo sopivasti luokkia, muuta ne vain factoreiksi eli as_factor().
+Jos luokkia on enemmän, voit yhdistellä/poistaa niitä fct_recode():lla tai jättää vain isoimmat luokat fct_lump():lla. 
+Jos muuttujat ovat jatkuvia, cut() auttaa jakamaan niitä, joko tasaisiin ryhmin tai itse valitsemiisi.
+
+Käytä siis ensimmäisellä koodialueella olevia mutate-komentoja tehdäksesi kaksi uutta muuttujaa. En laittanut tähän kovin tarkkaa sapluunaa, koska joku tarvitsee vain as_factor() -komennon, joku ehkä luokittelee, joku leikkaa.. 
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate()
+
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate()
+```
+
+3. Esittele valmistelemasi muuttujat
+
+```{r}
+ESS2023_Suomi |> tabyl(OMAMUUTTUJA1) |> as_tibble()
+```
+
+
+```{r}
+ESS2023_Suomi |> tabyl(OMAMUUTTUJA2) |> as_tibble()
+```
+
+
+## Hyvä tietää -osasto
+
+Seuraavat osiot eivät tule tutkimusraporttiin, joten niitä ei välttämättä tarvitse tehdä, mutta hyviä harjoituksia toki!
+
+### Ristiintaulukon teko omilla selittäjillä
+
+Tee ristiintaulukko kahdella luokitellulla selittäjälläsi. Kokeile kahta vaihtoehtoa kohtaan "TAHANVALINTA":"col" tarkoittaa sitä, että prosentit lasketaan sarakemuuttujan (jälkimmäisen eli OMAMUUTTUJA2) ja "row" taas rivimuuttujan (ensimmäisen eli OMAMUUTTUJA1) ryhmissä. Kumpi tuntuu luontevammalta? Tähän ei ole tilastollista vastausta, vaan kyse on siitä minkälaista tietoa halutaan tuottaa.
+
+```{r}
+ESS2023_Suomi |>
+  tabyl(OMAMUUTTUJA1, OMAMUUTTUJA2, show_na=F) |>
+  adorn_percentages("TAHANVALINTA") |>
+  adorn_pct_formatting(digits=2) |> as_tibble()
+```
+
+
+## Visualisaatiota kahdelle muuttujalle 
+
+Eri tavalla määritellyt pinotut pylväskuviot ovat usein informatiiviisia, joten otetaan vielä yksi variaatio.  Ristiintaulukon toinen muuttuja x-akselille ja toinen määrittämään väriä komennolla fill=muuttuja.
+
+Joskus muuttujien osuudet ovat kiinnostavia, joskus ainoastaan niiden suhteet. Jos haluaa nähdä paremmin puolueiden osuuksia, voi venyttää koulutuksen 100%:iin määrittämällä position="fill".
+
+Pitkien puoluenimien johdosta käänsin taas sivuttain. 
+
+```{r}
+ESS2023_Suomi |>
+ggplot(aes(x=puolue, fill=Koulutusaste)) +
+  geom_bar() +
+  coord_flip() +
+  ylab("Määrä")
+
+
+ESS2023_Suomi |> 
+  ggplot(aes(x=puolue, fill=Koulutusaste)) +
+  geom_bar(position="fill") +
+  coord_flip() +
+  ylab("Osuus")
+```
+
+## Oma visualisaatio
+
+Tee visualisaatio samasta asiasta kuin ristiintaulukkokin. 
+
+Kokeile erilaisia järjestyksiä ja tapoja muuttujien laittamiseksi kuvioon ja valitse niistä mielekkäin. Mitä valitsemasi kuvio nostaa aineistosta esille?
+
+```{r}
+ESS2023_Suomi |>
+ggplot(aes(x=OMAMUUTTUJA1, fill=OMAMUUTTUJA2)) +
+  geom_bar() +
+  coord_flip() +
+  ylab("Määrä")
+
+ESS2023_Suomi |> 
+  ggplot(aes(x=OMAMUUTTUJA1, fill=OMAMUUTTUJA2)) +
+  geom_bar(position="fill") +
+  coord_flip() +
+  ylab("Osuus")
+```
+

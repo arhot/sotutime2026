@@ -1,0 +1,218 @@
+---
+title: "Harjoitus 2: Alustava tutkimussuunnitelma ja aineiston perustarkasteluja"
+author: "Arho Toikka"
+output: html_document
+---
+
+# Aineiston ja työkalujen lataus
+
+Ladataan työkalut. Tämä olettaa, että olet saanut ne ensimmäisellä kerralla asennettua.
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(labelled)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Aineiston avaaminen
+
+Aineiston voi ladata uudestaan tällä komennolla. Jotta se toimisi, aseta työhakemisto Session - Set Working Directory - To project directory.. tai To choose directory -> valitse paikka jossa aineisto on.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+```
+
+Jos tästä tulee virheilmoitus, Error: 'ESS2023_Suomi.sav' does not exist in current working directory, niin
+1) Varmista vielä, että työhakemisto on oikea valitsemalla Session - Set working directory - To project directory tai ai To choose directory -> valitse paikka jossa aineisto on.
+2) Varmista, että aineistotiedosto on oikeassa hakemistossa
+3) Varmista, että aineistotiedoston nimi on oikea. Jos olet vaihtanut tiedoston nimen tai se on automaattisesti vaihtunut (esimerkiksi muotoon ESS2023_Suomi_1_), koodi ei toimi.
+4) Yritä uudestaan suorittaa koodia.
+4) Jos ei vieläkään onnistu, avaa tiedosto valikosta File - Import dataset - from SPSS ja etsi tiedosto sieltä, mihin olet sen tallentanut.
+
+Kun Rstudion ikkunan oikeaan ylänurkkaan ilmestyy ESS2023_Suomi -niminen data, tuominen on onnistunut.
+
+Tarkistetaan tilanne vielä pyytämällä yhteenveto syntymävuosimuuttujasta. 
+
+```{r}
+summary(ESS2023_Suomi$Syntymävuosi)
+```
+
+# Muuttujien muokkaaminen: mutate()
+
+Tehdään varmuuden vuoksi viime kerralla käyty esimerkki, ja lisätään vielä yksi toiminto: muuttujalla on aina nimi, mutta sillä voi olla myös otsikkoteksti ("label"). Muuttujan nimessä ei voi kannata olla välilyöntejä eikä esim. kysymysmerkkejä, mutta otsikkotekstissä voi olla mitä vaan. Otsikkotekstin voi muuttaa komennolla set_variable_label()
+
+mutate() muokkaa muuttujia - ensin tulee uuden muuttujan nimi, =,  ja sitten vanhan määritelmä. Tässä ikä saadaan laskemalla ihan miinuslaskua.
+Pari muuta uutta asiaa - muokkaukset voi tallentaa aineistoon käyttämällä operaattoria <-. Nyt täytyy ottaa aineisto ja tallentaa sen itsensä paikalle tietyin muokkauksin.
+Toisena ketjutusoperaattori |>, joka tarkoittaa "sitten". Nyt siis: ota aineisto, sitten tee siihen mutaatio.
+
+Ja perään summary() tarkistuksena.
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Ikä = 2023-Syntymävuosi |> set_variable_labels("Vastaajan ikä")) 
+
+summary(ESS2023_Suomi$Ikä)
+
+```
+### Historgrammi 
+
+Tehdään heti myös histogrammi. ggplot() käyttää oletuksena kuvatekstinä vastaajan otsikkotekstiä, jos sellainen on, ja muuttujan nimeä muuten.
+
+```{r}
+ESS2023_Suomi |> ggplot(aes(x=Ikä)) +
+  geom_histogram()
+```
+### Pylväskuvio
+
+Tehdään heti myös tavallinen pylväskuvio, joka eroaa histogrammista siinä että pylväiden välissä on rako ja jokaisen pylvään alla on luokan nimi, arvo tai koodi. 
+
+Muutetaan siis ensin B1 luokitelluksi muuttujaksi eli R-jargonilla factoriksi. (Tässä tulee tärkeä ero faktorianalyysiin, palataan siihen ensi ja seuraavalla viikolla.)
+
+Tämä onnistuu komennolla as_factor().
+
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(kiinnostus_politiikkaan = as_factor(B1))
+
+ESS2023_Suomi |> ggplot(aes(x=kiinnostus_politiikkaan)) + geom_bar()
+```
+## Sormiharjoituksia muuttujamuunnoksilla ja kuvioilla
+
+Tarkastellaan  perheiden koostumusta. Perheenjäsenten ikä on kysytty hieman mutkikkaasti: kysymys oli 
+"Voitteko luetella muut kotitalouden jäsenet etunimeltä vanhimmasta nuorimpaan?"
+ja tämän jälkeen on kysytty ikäjärjestyksessä perheenjäsenten sukupuoli, syntymävuosi ja sukulaisuussuhde. Nämä ovat sitten muuttujissa F2_, F3_, jne - ykköstä ei ole, se on vastaaja itse.
+
+Muuttujassa F2_syntymävuosi on vanhimman perheenjäsenen ikä. Yhdellä mutate()-komennolla voi tehdä monta muunnosta - ne pitää erottaa pilkulla (ja luettavuuden takia ehkä kannattaa erottaa rivinvaihdolla). 
+
+
+```{r}
+summary(ESS2023_Suomi$F2_syntymävuosi)
+
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(vanhimman_perheenjasenen_ika = 2023-F2_syntymävuosi,
+         ikaero_vanhimpaan_perheenjaseneen = Ikä-vanhimman_perheenjasenen_ika)
+
+summary(ESS2023_Suomi$vanhimman_perheenjasenen_ika)
+summary(ESS2023_Suomi$ikaero_vanhimpaan_perheenjaseneen)
+
+
+```
+
+Piirretään histogrammi. Laitetaan vaikka uutena selite kuvioon komennolla labs().
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=ikaero_vanhimpaan_perheenjaseneen)) +
+  geom_histogram() +
+  labs(x="Vastaajan ikä - perheen vanhimman muun jäsenen ikävuosi")
+
+```
+
+Ja taas hajontakuvio.
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=Ikä, y=vanhimman_perheenjasenen_ika)) +
+  geom_point() +
+  labs(x="Vastaajan ikä", y="Perheenjäsenen 2 ikä")
+
+
+```
+
+Mitä kuvista voi päätellä siitä, minkälaisia perheitä aineistossa on?
+
+## Vastaajien valinta: filter()
+
+Mielenkiintoista olisi ehkä tietää ikäeroja niiden osalta, jotka elävät puolisonsa kanssa.
+
+Tehdään siis ensin vastaajien suodatus eli filteröinti, joka ottaa mukaan vain ne, joilla puoliso on ikäjärjestyksessä ensimmäinen perheenjäsen. 
+
+Tässä tulee nyt molempia esiteltyjä "apumerkintöjä" eli |> = sitten ja + = lisää (kuvaan).
+
+Nyt koodi siis luetaan seuraavasti:
+
+Ota ESS2023_Suomi-aineisto.
+Sitten filteröi mukaan ne vastaajat, joilla F2_suhde saa arvon 1.
+Sitten ota tyhjä kuvapohja (nyt ei tarvitse sanoa dataa, koska se on rimpsun alussa).
+Lisää kuvaan histogrammi, jossa jokaisen vastaajan osalta lasketaan oman ja puolison iän erotus.
+Lisää kuvaan x-akselin otsikko, jossa kerrotaan mitä oli kuvassa.
+
+Nyt tästä jää pois vastaajat, joilla on puoliso, mutta puoliso ei ole vanhin perheenjäsen (eli esim oman tai puolison vanhemman kanssa asuvat).
+
+
+```{r}
+ESS2023_Suomi |>
+  filter(F2_suhde == 1) |>
+  ggplot(aes(x=ikaero_vanhimpaan_perheenjaseneen)) + 
+  geom_histogram() + 
+  xlab("Vastaajan ja puolison ikäero")
+```
+
+
+## Analyysi: Yhden lapsen yh-perheet
+
+Valitaan aineistosta kahden hengen perheet, joissa 2. perheenjäsen on vastaajan lapsi.
+
+1. Mistä kahdesta muuttujasta löytyy arvot, joilla voidaan rajata vastaajat halutusti?
+
+2. Filteröidään aineisto näillä arvoilla. Samalla tavalla kuin yllä - mutta nyt pitää laittaa kaksi filteriä. Yhdellä filter-komennolla voi asettaa useampia ehtoja loogisilla operaattoreilla: & tarkoittaa "ja", | tarkoittaa "tai" ja ! tarkoittaa "ei". Eli samoihin sulkuihin monta ehtoa.
+
+Vaikka siis filter(muuttuja1 == 8 & muuttuja2 == 4). 
+
+3. Tehdään näistä perheistä hajontakuvio, eli asetetaan x-akselille vastaajan ikä ja y-akselille toisen perheenjäsenen. 
+
+4. Mitä kuvio kertoo perheistä? 
+
+
+```{r}
+ESS2023_Suomi |>
+  filter(MUUTTUJA1 == ? & MUUTTUJA2 == ?) |>
+  ggplot(aes(x=Ikä, y=vanhimman_perheenjasenen_ika)) +
+  geom_point() +
+  labs(y="Toisen perheenjäsenen ikä")
+```
+ 
+
+## Analyysi 2: tutkimussuunnitelman tueksi
+
+Tällä viikolla palautetaan kurssin tutkimussuunnitelmat. Tehdään vielä muutama kuvio ja taulukko tämän tueksi.
+
+Tutkimussuunnitelmassa pitää ilmiö (esim. asenne, arvo, käyttäytymistapa), jonka vaihtelua tarkastellaan. Tämän ilmiön mittaria rakennetaan harjoituksessa 3, faktorianalyysi, eli näille ei tarvitse tänään tehdä vielä mitään. Tyypillisesti tässä kannattaa käyttää jotain aineiston suunniteltua muuttujaryhmää, jotka on kuvattu koodikirjassa valmiiksi ryhmiteltynä (samalla alkukirjaimella), mutta voi hyvin kyllä yhdistää muitakin. Huomioi, että tähän ei nyt laiteta esim. taustatekijöitä, vaan kiinnostuksen kohteena olevaa ilmiötä kuvaavia mittareita.
+
+Lisäksi pitää olla tekijöitä, jotka selittävät ilmiön vaihtelua. Tehdään näistä kuvioita.
+
+Tarvitaan ainakin kaksi jatkuvaa selittävää tekijää (esim. ikä). 
+Tarvitaan ainakin kaksi luokiteltua selittäjää (esim. sukupuoli).
+
+Sitä, onko muuttuja jatkuva vai luokiteltu, ei voi suoraan esimerkiksi vastausvaihtoehtojen määrästä päätellä, vaan asiaa joutuu päättelemään itse. Tärkeintä on, että jatkuva muuttuja on jatkumo, jonka arvot loogisesti muuttuvat ääripäästä toiseen. Esimerkiksi viidellä vaihtoehdolla mitatut Likert-väitteet voi tulkita jatkuviksi tai luokitelluiksi, riippuen tilanteesta.
+
+```{r}
+
+# Vaihda kaikkien CAPSEILLA kirjoitettujen paikalle omien muuttujiesi tiedot. 
+
+# Jatkuville muuttujille ei lähtökohtaisesti tarvitse tehdä mitään.
+# Tehdään näistä muuttujista histogrammit. Vaihda valitsemiesi muuttujien nimet koodiin - suoraan siis koodikirjasta, muista isot kirjaimet.
+ggplot(ESS2023_Suomi, aes(x=OMAMUUTTUJA1)) + geom_histogram()
+ggplot(ESS2023_Suomi, aes(x=OMAMUUTTUJA2)) + geom_histogram()
+
+# Luokitellut muuttujat pitää määritellä sellaisiksi.
+
+# OMALLE_MUUTTUJALLE_NIMI1 on siis itse keksimäsi, selkokielinen muuttujan nimi. Keksi mitään vaan, mutta ei välilyöntejä, eikä ehkä ääkkösiä.
+# ALKUPERÄINEN_MUUTTUJA1 on aineistossa käytetty kirjain+numero -yhdistelmä. Siis vaikka b1. Tämän löydät koodikirjasta.
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(OMALLE_MUUTTUJALLE_NIMI1 = as_factor(ALKUPERÄINEN_MUUTTUJA1),
+         OMALLE_MUUTTUJALLE_NIMI2= as_factor(ALKUPERÄINEN_MUUTTUJA2))
+
+ggplot(ESS2023_Suomi, aes(x=OMALLE_MUUTTUJALLE_NIMI1)) + geom_bar()
+ggplot(ESS2023_Suomi, aes(x=OMALLE_MUUTTUJALLE_NIMI2)) + geom_bar()
+
+
+
+```
+Näitä kuvioita ei tarvitse välttämättä ottaa talteen, tavoite on vain tukea tutkimussuunnitelman tekemisen pohdintaa. 
+

@@ -1,0 +1,259 @@
+---
+title: "Tehtävä 6"
+author: "Arho Toikka"
+date: "13. helmikuuta 2025"
+output: html_document
+---
+
+# Aineiston ja työkalujen lataus
+
+Ladataan työkalut. Tämä olettaa, että olet saanut ne ensimmäisellä kerralla asennettua.
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Aineiston avaaminen
+
+Aineiston voi ladata uudestaan tällä komennolla.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi_editoitu.sav")
+```
+
+
+## Regressioanalyysi ja varianssianalyysi
+
+Varianssianalyysi on tapa tehdä lineaarista mallinnusta vähän eri perspektiivistä, kun kaikki selittäjät ovat luokiteltuja. 
+
+Teen nyt samasta asiasta esimerkin kuin viimeksi, mutta teen nyt kolmiluokkaisen terveyden sukupuolen kaveriksi.
+
+Nyt tarvitaan selitettävä tekijä eli faktoripistemuuttuja + kaksi luokiteltua selittäjää. Nämä luovat koodit voi taas käydä ajamassa harjoitusten 3 ja 5 kohdalta, jos on tarvis, mutta minä olen kopioinut koodit tähän. Minä laitan tähän nyt kolme luokiteltua, jotta siinä näkyy tyypillisimmät tapaukset: 
+a) luokat ovat alkuperäisessä aineistossa ne mitä halutaankin, eli pitää vain merkitä muuttuja luokitelluksi ja nimetä järkevästi (Sukupuoli)
+b) muuttujassa on paljon luokkia, jotka ovat sillä tavalla järjestyksessä, että voi yhdistellä esim. 1-3, 4-8, 9-14 - tähän sopii komento cut() (Koulutusaste)
+c) muuttujan luokkia halutaan yhdistellä tai uudelleennimetä, ja tähän sopii fct_recode() (Terveys)
+
+
+```{r}
+schwartzin_arvot <- fa(ESS2023_Suomi |> select(starts_with("h")), nfactors=4, fm="ml", rotate ="varimax")
+faktoripisteet <- schwartzin_arvot$scores |> as_tibble() |> rename(Menestys = ML3, Arvostus = ML2)
+ESS2023_Suomi <- ESS2023_Suomi |> select(-matches(names(faktoripisteet))) |> bind_cols(faktoripisteet)
+
+
+# Faktoripistemuuttujan suunnan kääntö
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Menestys_isompi_arvostaa_enemman = Menestys * -1 )
+
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Sukupuoli = as_factor(Sukupuoli),
+         Koulutusaste = cut(F15, breaks=c(0, 3, 8, 15), labels=c("1.aste", "2. aste", "3.aste")), 
+         Terveys = as_factor(C7) |> fct_recode("Hyvä" = "Erittäin hyvä",
+                                                "Huono" = "Erittäin huono"))
+
+```
+
+# Muuttujien esittely 
+
+Raportissa pitää kertoa, mitä luokitellut selittäjät ovat. Tälläiset taulukot hoitavat homman, mutta voi kyllä olla tekstissäkin - lause "Vastaajista 961 oli miehiä ja 964 naisia" sisältää jo kaiken informaation mitä siitä tarvitaan.
+
+```{r}
+esittelytaulukko1 <- ESS2023_Suomi |> tabyl(Koulutusaste) |>
+  adorn_pct_formatting(digits=2)|> as_tibble()
+
+esittelytaulukko1
+
+
+esittelytaulukko2 <- ESS2023_Suomi |> tabyl(Sukupuoli) |>
+  adorn_pct_formatting(digits=2) |> as_tibble()
+
+esittelytaulukko2
+
+esittelytaulukko3 <- ESS2023_Suomi |> tabyl(Terveys) |>
+  adorn_pct_formatting(digits=2)|> as_tibble()
+
+esittelytaulukko3
+```
+
+# Keskiarvotaulukot ja -kuviot
+
+Regressioanalyysi ja varianssianalyysin tarkastelevat samaa asiaa vähän eri kulmista. Varianssianalyysissa tyypillisesti kaikki selittäjät ovat luokiteltuja, ja siksi tähän sopii erilainen taulukointi ja  visualisointi - ryhmien keskiarvot. 
+
+Aloitetaan varianssianalyysin valmistelu laskemalla ryhmäkeskiarvot. Tehdään niistä taulukko, jossa on havaintomäärät ryhmissä sekä selitettävän tekijän keskiarvo ja keskihajonta ryhmässä. 
+
+Tässä on hyvä korostaa samalla keskihajonnan ja keskiarvon keskivirheen ja siitä lasketun lutotamusvälin eroa.
+
+Keskihajonta = kuinka paljon muuttujan jakaumassa on ylipäätään vaihtelua.
+
+Keskiarvon keskivirhe = kuinka kaukana otoskeskiarvo yleisesti ottaen voisi olla todellisesta keskiarvosta?
+                        Lasketaan keskihajonta / otoskoon neliöjuuri.
+                        
+Keskiarvon luottamusväli = valitaan joku luottamustaso tai todennäköisyys (yleensä 95%), ja sen perusteella lasketaan väli, jossa           
+                          todennäköisesti todellinen keskiarvo olisi - tarkkaan ottaen sellainen luku, että 95% toistetuista otoksista
+                          haarukka sisältäisi luvun. 
+                          95% väliä vastaa kriittinen arvo 1.96, jota käytetään laskutoimituksessa. 
+                          Lasketaan keskiarvo -/+ kriittinen arvo * keskivirhe.
+
+```{r, rows.print=30}
+keskiarvotaulukko <- ESS2023_Suomi |> 
+  group_by(Sukupuoli, Koulutusaste) |>
+  summarize(n=n(), 
+            Keskiarvo=mean(Menestys, na.rm=T), 
+            Keskihajonta=sd(Menestys, na.rm=T),
+            Luottamusvalin_alaraja=Keskiarvo-1.96*Keskihajonta/sqrt(n),
+            Luottamusvalin_ylaraja=Keskiarvo+1.96*Keskihajonta/sqrt(n)) |>
+  mutate_if(is.numeric, round, 2)
+
+keskiarvotaulukko |> na.omit()
+
+write_xlsx(keskiarvotaulukko, "keskiarvotaulukko.xlsx")
+
+```
+
+Erot näkee toki taulukostakin, mutta kuvio on selkein. geom_errorbar() tekee kuvioon luottamusvälin (tai muun virheen, jos haluaa).
+Näissä piti vähän siirtää pylväitä, jotta ei mene päällekäin.
+
+```{r}
+keskiarvotaulukko |> na.omit() |> 
+  ggplot(aes(x=Koulutusaste, y=Keskiarvo, color=Sukupuoli)) +
+  geom_point(position=position_dodge(0.5)) +
+  geom_errorbar(aes(ymin=Luottamusvalin_alaraja, ymax=Luottamusvalin_ylaraja), position=position_dodge(0.5))
+```
+
+
+## Regressioanalyysi, yhdysvaikutus ja varianssianalyysi
+
+Sitten tarkentamaan kuvaa malleilla. Varianssianalyysi on regressioanalyysi, joten malli on ihan sama, mutta tehdään nyt yhdysvaikutus uutena. 
+
+Tehdään ensin kaksi mallia: ensin vain päävaikutukset, ja toiseen lisäksi näiden yhdysvaikutus. Yhdysvaikutuksen saa lisättyä helpoten *-merkillä, jolloin lisätään sekä päävaikutukset että yhdysvaikutus.
+
+Päävaikutusmallin tulkinta on siis: Kuinka paljon selitettävän arvo muuttuu selittäjän kasvaessa yhdellä, kun muut mallissa olevat tekijät on vakioitu? tai luokitellulle: Kuinka paljon ryhmä eroaa vertailuryhmästä, kun muut mallissa olevat tekijät on vakioitu?
+
+Yhdysvaikutusmallissa saadaan kolme kerrointa, jotka kertovat (kun 1. selittäjä on jatkuva ja 2. luokiteltu):
+1) Kuinka paljon selitettävän arvo muuttuu selittäjän kasvaessa yhdellä *vertailuryhmässä*?
+2) Kuinka paljon ryhmät eroavat, kun 1. selittäjä saa arvon nolla?
+3) Kuinka paljon selitettävän arvon muutos eroaa *verrattavassa ryhmässä* vertailuryhmän kertoimesta kohdassa 1?
+
+```{r}
+malli1 <- lm(Menestys~Sukupuoli+Koulutusaste, data=ESS2023_Suomi)
+malli2 <- lm(Menestys~Sukupuoli*Koulutusaste, data=ESS2023_Suomi)
+```
+
+```{r}
+taulukko1 <- tee_regressiotaulukko(malli1)
+
+taulukko1
+```
+
+```{r}
+taulukko2 <- tee_regressiotaulukko(malli2)
+taulukko2
+```
+## Regressioanalyysin ja varianssianalyysin ero
+
+Varianssianalyysissa on tapana raportoida muuttujien merkitsevyyttä tekstissä (luokkien välisten erojen merkitsevyyden lisäksi tai sijasta). Näköjään tähän tarvittiin vielä yksi paketti, jos halutaan laskea täsmälleen samat kertoimet kuin SPSS tuottaisi, joten asennetaanpa vielä. 
+
+```{r}
+install.packages("sjstats")
+install.packages("pwr")
+library(sjstats)
+```
+
+
+```{r}
+anova_stats(malli2) |> select(term, df, statistic, p.value, partial.etasq)
+```
+
+APAn mukainen tapa kirjoittaa tällainen tekstiin tämä on seuraava:
+
+Testisuure(vapausasteet muuttujassa, vapausasteet residuaaleissa) = testisuure = statistic, p-arvo=tarkka arvo tai <.001, muuttujan selitys osuus = partial eta squared.
+
+Sukupuolen osalta tämä olisi F(1, 1464) = 52.861, p < 0.001, eta2 = .035
+
+Jos haluaa vielä tarkempia tilastollisia vertailuja, niin ihan kaikki mahdolliset ryhmien väliset erot voi testata ns. post hoc testillä. Esimerkiksi TukeyHSD().
+
+Tätä ei kannata kokonaan raportoida, tekstiin voi nostaa mielenkiintoisia havaintoja.
+
+```{r}
+malli2 |> aov() |> TukeyHSD()
+```
+
+
+## Itsenäinen osuus: Lineaarinen malli ja yhdysvaikutus
+
+Tarvitset nyt siis harjoituksessa 3 tehdyn faktoripistemuuttujan ja harjoituksessa 5 tehdyt luokitellut muuttujat. Voit käydä suorittamassa koodit noissa kohdissa. 
+
+Esittele luokitellut selittäjät.
+ 
+```{r}
+esittely1 <- ESS2023_Suomi |> tabyl(SELITTAJA1) |>
+  adorn_pct_formatting(digits=2)|> as_tibble()
+
+esittely1
+
+
+esittely2 <- ESS2023_Suomi |> tabyl(SELITTAJA2) |>
+  adorn_pct_formatting(digits=2) |> as_tibble()
+
+esittely2
+
+write_xlsx(esittely2, "esittelytaulukko.xlsx")
+```
+
+
+## Keskiarvotaulukko
+
+Tehdäään keskiarvotaulukko.
+
+```{r}
+keskiarvotaulukko <- ESS2023_Suomi |> 
+  group_by(SELITTAJA1, SELITTAJA2) |>
+  summarize(n=n(), 
+            Keskiarvo=mean(SELITETTAVA, na.rm=T), 
+            Keskihajonta=sd(SELITETTAVA, na.rm=T),
+            Luottamusvalin_alaraja=Keskiarvo-1.96*Keskihajonta/sqrt(n),
+            Luottamusvalin_ylaraja=Keskiarvo+1.96*Keskihajonta/sqrt(n)) |>
+  mutate_if(is.numeric, round, 2)
+
+keskiarvotaulukko |> na.omit()
+
+write_xlsx(keskiarvotaulukko, "")
+```
+
+## Keskiarvokuvio
+
+Sama kuviona - todennäköisesti nätimpi tulee niin päin, että x-kohdassa on se selittäjä, jossa on enemmän ryhmiä (ja color-kohdassa siten se, jossa vähemmän), mutta voi toki kokeilla molemmat tavat.
+
+```{r}
+keskiarvotaulukko |> na.omit() |> 
+  ggplot(aes(x=SELITTAJA1, y=Keskiarvo, color=SELITTAJA2)) +
+  geom_point(position=position_dodge(0.5)) +
+  geom_errorbar(aes(ymin=Luottamusvalin_alaraja, ymax=Luottamusvalin_ylaraja),position=position_dodge(0.5))
+```
+
+## Mallinnus
+
+Tehdään malli selitettävästä muuttujasta ja kahdesta selittävästä muuttujasta pyhdysvaikutuksella (eli lisää muuttujat malliin *-merkillä). Tulkitaan regressiokertoimet eli luetaan ne sanallisesti auki. 
+
+```{r}
+malli <- ESS2023_Suomi |> lm(SELITETTAVA~SELITTAJA*SELITTAJA, data=_)
+```
+
+Tehdään vielä varianssianalyysitaulukko. Täältä saa kunkin muuttujan testauksen sekä selitysosuuden raportoitavaksi.
+
+```{r}
+anova_stats(malli) |> select(term, df, statistic, p.value, partial.etasq)
+```
+Tehdään vielä post hoc-testit mallille. Tulkitse ryhmien eroja - minkä ryhmien väliltä erot löytyivät?
+
+```{r}
+malli |> aov() |> TukeyHSD()
+```
+

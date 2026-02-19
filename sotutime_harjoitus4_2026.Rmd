@@ -1,0 +1,300 @@
+---
+title: "Harjoitus 4 - regressioanalyysi, osa 1"
+author: "Arho Toikka"
+output:
+  html_document: default
+  word_document: default
+---
+
+# Aineiston ja työkalujen lataus
+
+Ladataan työkalut. Tämä olettaa, että olet saanut ne ensimmäisellä kerralla asennettua.
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Aineiston avaaminen
+
+Jos on tarpeen avata aineisto, niin tässä vaiheessa sen voi tehdä. Jos viimeksi tallensit aineiston jossa oli muokkauksia niin avaa se. Ja tosiaan jos on jo auki aineisto niin ei tarvitse uudestaan.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+# tai
+ESS2023_Suomi <- read_sav("ESS2023_Suomi_editoitu.sav")
+```
+
+
+# Faktoripistemuuttujien lisääminen uudestaan
+
+Jos faktoripisteet on aineistossa tallessa tai lataat muokatun aineiston niin tätä ei tarvitse, mutta Taas jos ei ole faktoripistemuuttujia tallessa niin voi avata harjoituksen 3 ja suorittaa koodit siellä. Minä kopioin tähän koodit niin on kaikki samassa. 
+
+```{r}
+schwartzin_arvot <- fa(ESS2023_Suomi |> select(starts_with("H")), nfactors=4, fm="ml", rotate ="varimax")
+faktoripisteet <- schwartzin_arvot$scores |> as_tibble() |> rename(Menestys = ML3)
+ESS2023_Suomi <- ESS2023_Suomi |> select(-matches(names(faktoripisteet))) |> bind_cols(faktoripisteet)
+```
+
+# Muuttujien valmistelu regressioon
+
+Regressioon tarvitaan aina jatkuva selitettävä tekijä, ja jatkuvia tai luokiteltuja selittäjiä. 
+
+Selitän nyt viimeksi luomaani Menestys-faktoria. Koska latasin aineiston juuri yllä uudestaan, joudun suorittamaan faktorianalyysin uudestaan.Kaikkein varminta on kopioida faktorianalyysin koodit tähän harjoitukseen - taulukkoja ei enää tarvita, vaan ainoastaan nämä muuttujan luomisen koodit, mutta voi ajaa koodit myös edellisessä tiedostossa, tai jatkaa vaan jos ei ole sulkenut R:ää välissä.
+
+Koska arvokysymyksissä oli kysytty hämäävästi niin päin, että *pieni arvo* tarkoitti, että arvostaa menestystä *enemmän*, käännän sen suunnan niin, että luontevasti *iso arvo* = *enemmän*. Kun muuttujan keskiarvo on 0, niin tämä onnistuu helposti kertomalla se -1:llä. 
+
+
+Piirretään varmuudeksi vielä kuvat molemmista.
+
+```{r}
+
+# Faktoripistemuuttujan suunnan kääntö
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Menestys_isompi_arvostaa_enemman = Menestys * -1 )
+
+ESS2023_Suomi |> ggplot(aes(x=Menestys, y=as_factor(H1b))) + geom_point(position="jitter") + labs(y="h1b: Hänestä on tärkeää  olla rikas. \n Hän haluaa, että hänellä on paljon rahaa ja kalliita tavaroita.")
+ESS2023_Suomi |> ggplot(aes(x=Menestys_isompi_arvostaa_enemman, y=as_factor(H1b))) + geom_point(position="jitter") + labs(y="H1B") + labs(y="h1b: Hänestä on tärkeää  olla rikas. \n Hän haluaa, että hänellä on paljon rahaa ja kalliita tavaroita.")
+
+```
+
+
+Seuraavaksi selittävien muuttujien valmistelut. Ikä onkin jo tuttu, mutta tehdään uusiksi varmuudeksi.
+
+mutate() -komennolla voi myös vain nimetä muuttujan uudestaan, kuten tässä koulutus vuosina.
+
+Tässä tulee ensimmäinen esimerkki muuttujan merkitsemisestä luokitelluksi. R-slangilla jatkuva on numeric ja luokiteltu factor. Harmillisesti tässä on sana factor kahdessa hyvin samanlaisessa merkityksessä - factor analysis ja factor viittaa siis eri asiaan. Muuttujat ladataan tiedostosta numeroina, ja R ei tiedä onko joku luokiteltu tai luokitelluksi tulkittava. Pitää siis muuttaa kaikki luokitellut - tämä onnistuu komennolla as_factor(). 
+
+Ensi viikolla käydään tarkemmin luokiteltujen muuttujien käsittelyä.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Ikä = 2023-Syntymävuosi,
+         Koulutus_vuosina = F16, 
+         Sukupuoli = as_factor(Sukupuoli))
+
+ESS2023_Suomi |> select(Ikä, Koulutus_vuosina, Sukupuoli) |> summary()
+```
+
+
+# Muuttujien esittely 
+
+Tutkimusraportissa pitää esitellä käytettävät muuttujat. Jatkuvista muuttujista vähintään keskiarvo ja keskihajonta joko taulukossa tai tekstissä, luokitelluista prosenttitaulukko. Pylväskuvio tai histogrammi on myös ihan hyviä!
+
+
+```{r}
+taulukko_jatkuvien_esittely <- ESS2023_Suomi |> 
+  tee_jatkuvan_muuttujan_esittely(Menestys_isompi_arvostaa_enemman, Ikä, Koulutus_vuosina)
+
+taulukko_jatkuvien_esittely
+```
+
+Luokitelluista prosenttitaulukot pitää oikeastaan tehdä erikseen kaikista, eli jos sinulla on useampia luokiteltuja selittäjiä, niin tätä joutuu kopioimaan pariin kertaan. Taulukoista puhutaan enemmän ensi viikolla!
+
+```{r}
+esittelytaulukko_sukupuoli <- ESS2023_Suomi |> tabyl(Sukupuoli) |>
+  adorn_pct_formatting(digits=2) |> as_tibble()
+
+esittelytaulukko_sukupuoli
+
+
+```
+
+
+# Regressiomallin tekeminen 
+
+Regressiomallissa tulee käyttään R:n formula-notaatio. Se on y~x, tai selitettävä~selittäjä.
+
+Tuttuun tapaan regressiomalliobjektille on kaikenlaisia valmiita toimintoja - jo tuttu summary tärkeimpänä. 
+
+Lineaarisen regression kertoimen tulkinta on "kun selittäjä kasvaa yhdellä, muuttuu selitettävä x yksikköä" eli "kun koulutus lisääntyy vuodella, menestyksen arvostus muuttuu (keskimäärin) x yksikköä".
+
+Monella selittäjällä malli onnistuu lisäämällä selittäjiä malliin +-merkillä. 
+Raportoitavat asiat ovat regressiokertoimet, niiden luottamusvälit, standardoidut kertoimet ja merkitsevyydet. 
+Jokaisen näistä voi pyytää erikseenkin, ja katsotaan nyt nämä ensiksi.
+
+Tässä kaksi erilaista mallia, ensin yhdellä, sitten useammalla selittäjällä.
+
+
+```{r}
+m1 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman~Koulutus_vuosina, data=_)
+summary(m1)
+```
+
+```{r}
+m2 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman~Koulutus_vuosina+Sukupuoli, data=_)
+summary(m2)
+```
+
+```{r}
+m3 <- ESS2023_Suomi |> lm(Menestys_isompi_arvostaa_enemman~Koulutus_vuosina+Sukupuoli+Ikä, data=_)
+summary(m3)
+```
+
+Taas kerätään taulukon tiedot valmiiksi siistiin muotoon. 
+Alla olevalla komennolla saadaan tarvittavat tiedot yhteen, pyöristettyä, ja sellaiseen muotoon, joka pitäisi siirtyä ihan copy&pastella Word-taulukoksi.
+
+
+```{r}
+regressiotaulukko1 <- tee_regressiotaulukko(m1)
+regressiotaulukko1
+```
+
+
+```{r}
+regressiotaulukko2 <- tee_regressiotaulukko(m2)
+regressiotaulukko2
+```
+
+
+```{r}
+regressiotaulukko3 <- tee_regressiotaulukko(m3)
+regressiotaulukko3
+```
+
+
+Taulukot voi yhdistä yhteen näin.
+
+```{r}
+taulukot_yhdessa <- regressiotaulukko1 |> bind_rows(regressiotaulukko2) |> bind_rows(regressiotaulukko3)
+taulukot_yhdessa
+```
+
+Taas voi laittaa talteen. 
+
+```{r}
+write_xlsx(taulukot_yhdessa, "regressiotaulukko.xlsx")
+```
+
+
+# Regression visualisointi
+
+Tuttu hajontakuvio, mutta nyt kaksi uutta yksityiskohtaa: 
+
+geom_point() pisteitä voi vähän siirtää, jotta ne eivät mene päällekäin. Tämä optio on on position='jitter'
+geom_smooth() tulee lineaariseksi, kun laittaa siihen method='lm' eli linear model.
+
+```{r}
+ESS2023_Suomi |> ggplot(aes(x=Koulutus_vuosina,y=Menestys_isompi_arvostaa_enemman)) +
+  geom_point(position="jitter") + 
+  geom_smooth(method='lm')
+```
+
+
+```{r}
+ESS2023_Suomi |> ggplot(aes(x=Ikä,y=Menestys_isompi_arvostaa_enemman, color=Sukupuoli)) +
+  geom_point(position="jitter") + 
+  geom_smooth(method='lm')
+
+```
+
+## Aineiston tallennus
+
+Otetaan nyt kuitenkin koodi, jolla voi tallentaa (ja ladata) aineiston muokkauksineen. Tämä tallentaa siis aineiston muokkauksineen - varmuudeksi parissa formaatissa, koska .sav eli SPSS-tiedoston tallentaminen ei ihan aina toimi.
+
+Tämä tallentaa (ja lukee) tiedoston työhakemistosta. Voit taas valita työhakemiston valikosta Session -> Set Working directory -> choose directory.
+
+```{r}
+# SPSS-tiedostoksi tallennus ja lukeminen
+write_sav(ESS2023_Suomi, "ESS2023_Suomi_editoitu.sav")
+
+```
+
+
+# Itsenäinen osuus
+
+1. Selitettävä tekijä on viime viikolla tehdystä faktorianalyysista yksi tekemistäsi faktoreista.
+Jos olet sulkenut R:n välissä, käy ajamassa nuo koodit uudestaan, tärkeimpänä se kohta, jossa liitetään faktoripisteet aineistoon!
+
+2. Valmistele selittävät tekijät. Tässä käytetään ainakin tutkimussuunnitelmassa valitsemiasi kahta jatkuvaa selittäjää. Voit kyllä käyttää myös luokiteltuja selittäjiä.
+
+Tässä voisi olla hyvä nimetä jatkuvat selittäjät selkeämmillä nimillä, vaikka mitään ei pitäisikään muuten tehdä. Mutta voi olla, että pitää jotain muokatakin, esim. poistaa ylimääräisiä 99-tietoja.
+
+Luokitelluista muuttujista luokkien poistamista, luokkien yhdistämistä, yms. käsitellään ensi viikolla, joten nyt jos haluat käyttää luokiteltuja selittäjiä, merkitse ne vain luokitelluiksi komennolla as_factor()
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate()
+
+```
+
+3. Esittele muuttujat. 
+
+Tallenna tai kopioi tämä talteen. 
+
+Jos käytät luokiteltuja selittäjiä, näille sopiva tapa esitellä on prosenttitaulukko (yllä tai harjoitus 3).
+
+```{r}
+
+esittelytaulukko_jatkuvat_muuttujat <- ESS2023_Suomi |> tee_jatkuvan_muuttujan_esittely()
+esittelytaulukko_jatkuvat_muuttujat
+```
+
+4. Tee regressioanalyysi. Kopioi tämä talteen.
+
+```{r}
+malli1 <- ESS2023_Suomi |> lm(SELITETTAVA~SELITTAJA, data=_)
+
+taulukko1 <- tee_regressiotaulukko(malli1)
+taulukko1
+
+```
+
+```{r}
+malli2 <- ESS2023_Suomi |> lm(SELITETTAVA~SELITTAJA1+SELITTAJA2, data=_)
+
+taulukko2 <- tee_regressiotaulukko(malli2)
+
+taulukko2
+
+```
+
+```{r}
+malli3 <- ESS2023_Suomi |> lm(SELITETTAVA~SELITTAJA1+SELITTAJA2+SELITTAJA3, data=_)
+
+taulukko3 <- tee_regressiotaulukko(malli3)
+
+taulukko3
+
+```
+
+Samat tiedot esitettynä yhdessä taulukossa.
+
+```{r}
+regressiotaulukot <- taulukko1 |> bind_rows(taulukko2) |> bind_rows(taulukko3)
+regressiotaulukot
+
+```
+
+
+```{r}
+write_xlsx(regressiotaulukot, "omat_regressionmallit.xlsx")
+```
+
+
+6. Tee hajontakuvio. Kopioi tämä talteen.
+
+Yksi hajontakuvio riittää - tee sellainen, joka mielestäsi havainnollistaa tulosta parhaiten. Kaikkia selittäjiä ei yhteen kuvaan saa, joten joko valitse joku asia jota haluat raportissa kuvata, tai tee useampi kuva. 
+
+color-kohtaan toimii luokiteltu muuttuja yleensä selkeämmin.
+
+```{r}
+ESS2023_Suomi |> ggplot(aes(x=SELITTAJA1,y=SELITETTAVA, color=SELITTAJA2)) +
+  geom_point(position="jitter") + 
+  geom_smooth(method='lm')
+
+
+```
+
+
+
+
+
+

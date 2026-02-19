@@ -1,0 +1,260 @@
+---
+title: "Perusmuuttujamuunnokset"
+output: html_document
+---
+
+# Työkalujen lataus
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(labelled)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+
+```
+
+# Muuttujien muokkaaminen
+
+Tässä tiedostossa on esimerkkejä muuttujamuunnoksista. 
+
+## Pelkkä uudelleennimeäminen
+
+Muuttujia voi nimetä uudellaan vaikkapa näin. Tämä tekee kopion uudella nimellä, jolloin alkuperäinen säilyy aineistossa. rename() toimii myös, mutta tällöin alkuperäinen ei jää enää aineistoon, ja jos tulee virhe niin pitää ladata aineisto uudestaan.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(perheen_jasenen_2_sukupuoli = F2_sp)
+```
+
+
+## Puuttuvien poisto
+
+Jos aineistossa on numeroarvo, joka kuvaa puuttuvaa tietoa, se pitää poistaa ennen analyyseihin ryhtymistä. 
+
+```{r}
+# Yksi muuttuja kerrallaan
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(E11 = E11 |> na_if(4))
+
+# Monesta voi poistaa vaikkapa näin! 
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(across(c(E9, E10, E11), na_if, 4))
+# Tämä antaa varoituksen kun komennon ohjeet ovat muuttuneet, mutta toimii kyllä!
+```
+
+## Laskutoimitukset
+
+Erilaisia laskutoimituksia voi tehdä ihan +, -, *, / -merkeillä. Summamuuttujalle suositeltavampi tapa on laskea keskiarvo, koska tämä ratkaisee sen, mitä tehdä niille, jotka vastaavat vain osaan kysymyksistä, mutta toimii tämäkin esimerkki.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Ikä = 2023-Syntymävuosi,
+         summamuuttuja_yhteenlaskuna = A4+A5+A6) 
+```
+
+## Summamuuttuja
+
+Summamuuttuja vastausten keskiarvona onnistuu vaikkapa näin. pick() valitsee muuttujia, mutta vain yhden laskutoimituksen ajaksi (toinen muuttujia valitseva komento select() valitsee muuttujat pysyvästi.)
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(
+    luottamus_summamuuttuja_keskiarvo = rowMeans(pick(A4, A5, A6)))
+```
+
+## Standardointi
+
+Muuttujan standardointi eli asteikon skaalaus siten, että keskiarvo on 0 ja keskihajonta 1 on hyvä perusmuunnos.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(onnellisuus_standardoituna = scale(C1))
+```
+
+
+## Muuttujan suunnan kääntö
+
+Usein on tarpeen mukaista kääntää muuttujan suunta - esimerkiksi pienet numeeriset arvot saattavat tarkoittaa ajatuksellisesti tai merkityksellisesti isoja asioita.
+
+Tämä onnnistuu usein helpolla laskutoimituksella. Esimerkiksi vain positiivisia arvoja saavan muuttujan osalta voidaan vain laskea minimi ja maksimi yhteen ja vähentää siitä vastauksen arvo, ja saadaan samalla alkuperäisellä asteikolla oleva muuttuja. 
+
+```{r}
+# Likert-väitteen kääntö samalle asteikolle: minimi on 1 ja maksimi 5, joten voidaan laskea 6-vastaus.
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(B33_kaannetty = 6-B33)
+```
+
+
+Moneen muuttujaan saa tehtyä muunnoksia lisäämällä mutate-komentoon ensimmäiseksi across(muuttujien valinnan komento), jossa muuttujien valinnan komento voi olla esim. faktoriharkasta tuttu starts_with() (jos kaikki alkavat samalla) tai one_of(), jossa sitten pitää listata kaikki.
+
+Muuttujien valinnan jälkeen tulee funktio, jota kaikkiin valittuihin sovelletaan. Tässä jos pitää määritellä funktiolle argumentteja tai muuta (kuten tässä itse laskutoimitus), komento pitää aloittaa tilde- merkillä ~. 
+Tämän jälkeen komennossa viitataan ilmaisulla ".x" muuttujaan, jota vuorollaan operoidaan.
+
+Jos muuttujia ei nimeä uudestaan, ne tallennetaan alkuperäisten päälle, ja tässä on aina riskinsä (jos tulee virhe, niin ei ole enää mistä tarkistaa). Argumentti .names mahdollistaa uusien muuttujien nimeämisen - {col} viittaa kunkin muuttujan alkuperäiseen nimeen, eli .names="{col}_kaannetty" yhdistää alkuperäisen nimen ja sanan käännetty. Vaikkapa H1a pysyy siis aineistossa ennallaan, ja käännetty muuttuja tulee nimellä h1a_kaannetty (ja sama logiikka muilla). Tämän jälkeisissä komennoissa pitää tietysti sitten muistaa käyttää ja valita tuo h1a_kaannetty, silloin kun sitä haluaa käyttää!
+
+Eli jos haluan kääntää Schwartzin arvoväitteet ESS-ESS2023_Suomissa, joiden asteikko on 1-6, laskutoimitus on 7-vastaus (maksimi alunperin 6 ja minimi 1), ja se onnistuu näin: 
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(across(starts_with("H"), ~ 7 - .x, .names="{col}_kaannetty"))
+```
+
+
+## Logaritmimuunnos 
+
+Luennollakin oli esimerkkinä logaritmimuunnos, jonka jälkeen regressiossa tulkitaan kerroinvaikutuksia ja prosentteja. 
+
+Andrew Gelman suosittelee kaikkien positiivisten (eli jos kaikki arvot ovat plussalla) logaritmimuunnosta, koska %-tulkinta on tosi näppärä 
+https://statmodeling.stat.columbia.edu/2019/08/21/you-should-usually-log-transform-your-positive-data/
+
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(onnellisuus_log = log(C1))
+```
+
+
+## Luokitellut muuttujat eli factorit
+
+Valitettavasti R-jargonissa factorilla tarkoitetaan sekä luokiteltua muuttujaa että faktorianalyysiä. 
+
+### Numeerisesta (jatkuvasta) luokitelluksi
+
+Yleensä ESS2023_Suomit jaetaan sellaisessa muodossa, että kaikki tiedot ovat numeerisia - ja luokitellut pitää sellaisiksi merkata. Tämä onnistuu vaikkapa näin: 
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Asuinymparisto = as_factor(F14))
+```
+
+
+### Luokitellusta numeeriseksi
+
+Toiseen suuntaan muutos on vähän erikoisempi, mutta joskus sillekin tulee käyttöä. Huomaa, että jos muutat näin edes takaisin, niin luokkien numerot eivät pysy samoina kuin alunperin.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Asuinymparisto_takaisin_numerona = as.numeric(Asuinymparisto))
+```
+
+
+### Luokkien muokkaaminen yksi kerrallaan
+
+Luokiien nimiä voi muokata komennolla fct_recode()- alla vielä ensin muutetaan muuttuja luokitelluksi, ja sitten muutellaan noita luokkien nimiä. 
+
+Logiikka on "uusi luokka"="vanha luokka". Jos et tee jollekin vanhalle mitään, se pysyy entisellään. Uusi luokka NULL poistaa luokan vaihtoehdoista kokonaan, ja samalla siis kaikki vastaajatkin muuttuvat puuttuviksi.
+
+Tällä komennolla joudut toistamaan jokaisen luokan, jota haluat muuttaa. Jos haluat yhdistää paljon luokkia, seuraava vaihtoehto on helpompi.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |>
+  mutate(Asuinalue = F14 |> as_factor() |> fct_recode("Suurkaupunki"   = "Suuri kaupunki",
+  "Taajama" = "Suuren kaupungin lähiö tai lähiseutu",
+  "Pieni kaupunki" = "Pieni tai keskikokoinen kaupunki tai kunta",
+  "Pieni kaupunki" = "Pienempi taajama tai kunta",
+  "Maaseutu" = "Maaseutu / haja-asutusalue"
+  ))
+```
+
+### Luokkien muokkaaminen yhdistämällä useita
+
+Jos haluat yhdistää paljon luokkia yhteen ryhmään, fct_collapse() on tässä kätevin. Nyt logiikka on "uusi luokka" = c("vanha luokka1", "vanha luokka2"). c() tarvitaan luokkien ympärille, jotta R ymmärtää että tässä on lista luokkia. Jos vanhoja luokkia on yksi, silloin tätä merkintää ei tarvita.
+
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi %>%
+  mutate(
+    Suuralue = as_factor(Maakunta) %>%
+      fct_collapse(
+        "Helsinki-Uusimaa" = "Helsinki-Uusimaa",
+        "Länsi-Suomi" = c("Keski-Suomi", "Etelä-Pohjanmaa", "Pohjanmaa", "Satakunta", "Pirkanmaa"),
+        "Etelä-Suomi" = c("Varsinais-Suomi", "Kanta-Häme", "Päijät-Häme", "Kymenlaakso", "Etelä-Karjala"),
+        "Pohjois- ja Itä-Suomi" = c("Etelä-Savo", "Pohjois-Savo", "Pohjois-Karjala","Kainuu", "Keski-Pohjanmaa", "Pohjois-Pohjanmaa", "Lappi"),
+        "Ahvenanmaa" = "Åland"
+      )
+  )
+```
+
+### Puuttuva tieto luokaksi
+
+Joskus puuttuva tieto ei olekaan vain tyhjä, vaan sisältää tietoa. Esimerkiksi puoluekysymystä ei ole kysytty niiltä, jotka eivät äänestäneet ollenkaan, mutta heidät voidaan haluta mukaan analyysiin. 
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(puolue_sis_ei_aanestaneet = as_factor(B14) |> fct_na_value_to_level("Ei äänestänyt"))
+```
+
+
+### Numeerisesta luokkiin jakaminen
+
+Usein kun on paljon ryhmiä ja ryhmät ovat järjestyksessä, on helpointa tehdä luokittelu alkuperäisten numeroiden perusteella. Esimerkiksi eri tyyppisiä koulutuksia suorittaineiden osuudet muuttujassa f15 voi jakaa näin.
+
+Tähän sopii komento cut(). 
+
+Leikkaaminen vaatii rajojen tai leikkauspisteiden määrittelyn argumentilla breaks. leikkauspisteet ovat luokkien ylärajat ja rajalla oleva arvo kuuluu pienempään luokkaan (oletuksena). Tämä saa näyttää vähän hassulta, etenkin ensimmäisen numeron osalta: ensimmäisen numeron pitää olla pienempi kuin muuttujan pienin arvo, koska muuten pienin arvo leikkautuisi ulos. Esimerkin voi siis lukea vaikka niin, että kaikki arvot väliltä 0.01-3 menevät ensimmäiseen luokkaan, 3.01-8 toiseen luokkaan..
+
+Kaikki ensimmäiseen leikkauspisteeseen asti ja kaikki viimeisen leikkauspisteen yläpuolella muuttuu automaattisesti puuttuvaksi. 
+
+Ryhmille voi määritellä myös nimet saman tien argumentilla labels. 4 leikkauspisteen välissä on kolme luokkaa, joten nyt nimiä tulee kolme - aina yksi vähemmän kuin leikkauspisteitä.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Koulutusaste = cut(F15, breaks=c(0, 3, 8, 14), labels=c("1.aste", "2. aste", "3.aste")))
+```
+
+### Numeerisen arvojen muuttaminen 
+
+Joskus haluaa muuttaa numeroarvoja toisiksi, vaikka tämä on toki harvinaisempaa kuin luokiteltujen muuttujien yhdistely (jatkuvassa muuttujassa ei halua, että ryhmiä on vähän!). Tämä onnistuu esim. case_match() -komennolla, johon merkitään vanha_arvo ~ uusi_arvo.
+
+Jos et muokkaa kaikkia luokkia, lisää vielä .default=alkuperäinen_muuttuja, niin kaikki arvot pysyvät mukana.
+
+```{r}
+
+
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(TuloluokkaEuroina = F41 |> case_match(1 ~ 700, 2~1120, 3~1588, 4~2012, 5~ 2421,
+                                                        6~2893, 7~3491, 8~4190, 9~5115, 10~6000))
+summary(ESS2023_Suomi$TuloluokkaEuroina)
+
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(TuloluokkaEuroina_versio2 = F41 |> case_match(1 ~ 700, 2~1120, 3~1588, .default=F41))
+                                                            
+
+summary(ESS2023_Suomi$TuloluokkaEuroina_versio2)
+                                                     
+
+
+```
+
+## Tietojen yhdistäminen useammasta muuttujasta tai monimutkaisilla ehdoilla
+
+Joskus on tarpeen yhdistellä useammasta muuttujasta tietoja tai muuten tehdä jotain monimutkaisempaa. Tähän voi käyttää case_when()-komentoa, jossa logiikka on:
+
+vanhan_muuttujan_nimi == vanhan_muuttujan_arvo ~ uuden_muuttujan_arvo, ja näitä toistetaan niin monta kuin tarvitsee. Jos jonkun arvon määrittelee puuttuvaksi, tässä pitää määritellä oikea puuttuva tyyppi - jos tekee luokiteltua muuttujaa niin NA_character_ heittää oikeaan lokeroon, vastaavasti numeerisessa muuttujassa voisi käyttää NA_numeric_ 
+
+Lopuksi kannattaa määritellä TRUE ~ NA_character_ tai vastaava ehto, jonka perusteella ne joihin mikään ehto ei pätenyt menevät puuttuvaksi oikein. Ja jos haluaa muuttujan olevan luokiteltu, niin se pitää vielä as_factorilla kertoa.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(yhteiskunnallinen_asema = case_when(
+    F17a_1 == 1 ~ "Työntekijä",
+    F17a_3 == 1 ~ "Työtön",
+    F17a_4 == 1 ~ "Työtön",
+    F17a_7 == 1 ~ NA_character_,
+    TRUE ~ NA_character_
+  ) |> as_factor())
+
+summary(ESS2023_Suomi$yhteiskunnallinen_asema)
+
+```
+
+
+

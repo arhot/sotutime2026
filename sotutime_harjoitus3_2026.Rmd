@@ -1,0 +1,212 @@
+---
+title: "Harjoitus 3: faktorianalyysi"
+author: "Arho Toikka"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+# Aineiston ja työkalujen lataus
+
+Ladataan työkalut. Tämä olettaa, että olet saanut ne ensimmäisellä kerralla asennettua.
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(psych)
+library(lm.beta)
+library(labelled)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Aineiston avaaminen
+
+Aineiston voi ladata uudestaan tällä komennolla. Jotta se toimisi, aseta työhakemisto Session - Set Working Directory - To project directory.. tai To choose directory -> valitse paikka jossa aineisto on.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+```
+
+### Muuttujien poiminta aineistosta 
+
+Joskus on kiva valita monta muuttujaa kerralla. 
+
+Tähän toimivia käskyjä ovat esimerkiksi starts_with, ends_with, contains, one_of ("Valitaan", "lista", "muuttujista") ja num_range, jolla saa yhdistettyä muuttujan nimen ja alkuosan.
+
+Tässä kolme esimerkkiä, joista varmasti jotain soveltamalla onnistuu omien muuttujien valinta:
+
+```{r}
+# Valitaan kaikki h-alkuiset muuttujat, eli Schwartzin arvoväitteet
+ESS2023_Suomi |> select(starts_with("H")) |> summary()
+
+# Valitaan muuttujat b6-b12 (eli ei b1, b1d, jne)
+ESS2023_Suomi |> select(num_range("B", 6:12)) |> summary()
+
+# Aina voi vaan listata
+ESS2023_Suomi |> select(B6, B7, B8, B9, B10, B11, B12) |> summary()
+
+```
+
+
+
+## Itse faktorianalyysi
+
+Ekstrahointitavoista ja rotatointitavoista ei nyt puhuta - käytetään maximum likelihood- eli suurimman uskottavuuden ekstrahointia ja varimax-rotaatiota. Raportissa pitää kuitenkin kertoa, että nämä menetelmät olivat käytössä.
+
+Faktorien määrän päättäminen on sen sijaan keskeistä. Ulottuvuuksia eli faktoreita voi nyt olla mikä tahansa määrä yhdestä kysymysten määrä miinus yhteen. Faktorien määrä ei siis ole kysymysten määrä! Valinta on sisällöllinen kysymys - montako erillistä ulottuvuutta kysymyksistä oikeasti muodostuu. Nyt valitaan sisällöllisesti sopiva määrä, ja myöhemmissä analyyseissä voidaan keskittyä yhteen tai muutamaan näistä.
+
+Selkeiten tulkintaan pääsee tulostamalla pelkästään mielenkiintoiset faktorilataukset ja järjestämällä ne. Jostain syystä tämä komento numeroi faktorit ensin ja sitten järjestää ne vielä, ja numerot faktorien alustavissa nimissä eivät ole järjestyksessä - tässä esimerkissä siis ensimmäisenä tulee ML3, ja tämä on ensimmäinen faktori.
+
+h2 on kommunaliteetti, eli kuinka paljon kunkin muuttujan vaihtelusta saatiin selitettyä. u2 ja com eivät ole tarpeen. Taulukossa on muutenkin vähän ylimääräistä.
+
+Jouduin tuohon alkuun määrittämään rows.print=25, jotta koko taulukko tulostuisi.
+
+```{r, rows.print=25}
+schwartzin_arvot <- fa(ESS2023_Suomi |> select(starts_with("H")), nfactors=4, fm="ml", rotate ="varimax")
+
+print(schwartzin_arvot, sort=T, cut=0.3)
+
+schwartzin_arvot$Vaccounted
+```
+
+## Taulukoiden rakentaminen R:ssä
+
+Yllä olevasta taulukosta voi tietysti käsin copy & pasteamalla rakentaa taulukon käsin, mutta R-ympäristössä luonteva tapa on hyödyntää komentoja ja tehdä standardin mukaiset taulukot. 
+
+R:ää käyttävät organisaatiot tekevät yleensä omat taulukko- ja kuviotyylinsä ja jakavat ne henkilöstön käyttöön R-paketteina. Esimerkiksi Terveyden ja hyvinvoinnin laitoksella on tällainen paketti. Yliopisto, tiedekunta ja tieteenalat ovat vähän eri tyyppisiä organisaatioina, joten yhtä tyyliä ei voi määritellä, mutta yksi ohje meillä kuitenkin on yhteisenä - sosiaalitieteiden kirjoitusohjeissa määritellään taulukoiden muodosta. 
+
+## Faktorianalyysin taulukko
+
+Kun komentojen lataaminen on onnistunut, meillä on nyt käytössä komento tee_faktorianalyysitaulukko(), joka nimensä mukaan tekee sosiaalitieteiden kirjoitusohjeiden mukaisen taulukon. 
+
+Nimeä tässä faktorit uudestaan tulkintasi mukaan - esimerkissä vain yksi nimettynä, mutta nimeä kaikki.
+
+```{r, rows.print=25}
+taulukko1 <- tee_faktorianalyysitaulukko(schwartzin_arvot) |> rename(Menestys = ML3) 
+taulukko1
+
+```
+
+
+
+## Wordiin siirtäminen
+
+Yllä oleva taulukko saattaa siirtyä Wordiin/Exceliin raportointia varten ihan copy/pastella, mutta joissain Word-versioissa ohjelmisto ei tunnista tiedostoa. Tällöin (ja toki muutenkin) taulukon voi tallentaa Excel-tiedostoksi. 
+
+Kuvakaappauskin toimii, mutta tällöin tietenkään taulukkoa ei voi enää Wordissa editoida, ja siihen tulee vähän ylimääräisiä R-merkintöjä. 
+
+```{r}
+write_xlsx(taulukko1, "valmis_taulukko.xlsx")
+```
+
+Jos aiot kirjoittaa tutkimusraportin suoraan Rstudiossa, tämäkin toki onnistuu. Laitan tästä erilliseen vinkkitiedoston R-materiaalit kansioon.
+
+## Faktoripistemuuttujan yhdistäminen aineistoon
+
+Vastaajien arvot saadaan talteen lisäämällä faktoripistemuuttujat aineistoon. Esimerkiksi voi edetä niin, että ottaa ne ensin erikseen, sitten nimeää ne äskeisen tulkinnan mukaan, ja lopuksi yhdistetään kaikki faktoripisteet aineistoon niin päästään tekemään vertailua.
+
+Tässäkin kannattaa nimetä faktorit samalla tavalla kuin yllä taulukossa. Näin aineistoon tulee suoraan muuttujat, joiden nimi vastaa faktoripistemuuttujan kuvaamaa ilmiötä. 
+
+```{r}
+faktoripisteet <- schwartzin_arvot$scores |> as_tibble() |> rename(Menestys = ML3)
+faktoripisteet
+
+
+ESS2023_Suomi <- ESS2023_Suomi |> select(-matches(names(faktoripisteet))) |> bind_cols(faktoripisteet)
+```
+
+Katsotaan vielä mitä tuli tehtyä. Faktoripistemuuttujat ovat normaalisti jakautuneita, keskiarvolla 0 ja keskihajonnalla 1. Asteikko ei siis ole sama kuin alkuperäisissä väitteissä, vaan ns. standardoitu - riippumatta minkälaisia muuttujia laitoit analyysin, keskiarvo on hyvin lähellä nollaa. 
+
+```{r}
+summary(ESS2023_Suomi$Menestys)
+```
+
+ja visualisoidaan yksi faktori histogrammina.
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=Menestys)) +
+  geom_histogram()
+```
+
+
+## Aineiston tallentaminen 
+
+Aineiston voi tallentaa tiedostoon, vaikkapa samassa formaatissa kuin se ladattiinkin eli SPSS:n .sav-tiedostona. Ei kannata tallentaa alkuperäisellä tiedostonimellä - aina voi olla tullut joku virhe. Jos tästä tiedostosta haluaa jatkaa seuraavalla kerralla niin pitää muistaa myös muokata se koodiin.
+
+
+```{r}
+write_sav(ESS2023_Suomi, "ESS2023_Suomi_editoitu.sav")
+```
+
+## Analyysi
+
+Faktorianalyysistä on eniten hyötyä aineiston tiivistämisessä ja mittarin rakenteen tutkimisessa silloin, kun muuttujia (yksittäisiä kysymyksiä) on melko paljon
+
+Nyt kannattaa lähteä tiivistämään mittareita omaa analyysia varten. Tyypillisesti faktorianalyysillä saa tehtyä hyviä selitettäviä tekijöitä tuleviin analyyseihin. Olet luultavasti tutkimussuunnitelmassa valinnut jonkin kysymyssarjan, joka käsittelee tiettyä aihepiiriä. Nyt käytetään näitä tutkimussuunnitelmassa valittuja kysymyksiä.
+
+Aloitetaan tarkastelemalla summaryja. Varmista koodikirjasta, että mahdolliset puuttuvat tiedot on merkitty oikein (ja jos ei ole, tee kaikille muuttujille tarvittavat mutaatio). 
+
+Yllä erilaisia tapoja valita monta kysymystä, tässä nyt kaikkiin tuo select(MUUTTUJA1, MUUTTUJA2, MUUTTUJA3) - sinulla voi siis olla muukin määrä, vaikka aina MUUTTUJA21 asti.
+
+Mieti, montako ulottuvuutta näiden muuttujien takana voisi olla. Ulottuvuuksia eli nfactors täytyy olla vähemmän kuin muuttujia. Kokeile muutama erilaista vaihtoehtoa nfactorsille ja tulkitse raakataulukosta miltä faktorit näyttäisivät.
+
+Tulkinta tarkoittaa siis ulottuvuuden nimeämisen prosessia. Mikä yhdistää kullekin faktorille latautuvia kysymyksiä (eli niitä, joiden lataus on yli 0,3 tai alle -0,3)? Miten tämän faktorin voisi näiden muuttujien perusteella otsikoida? 
+
+Muista, että ulottuvuus ei tarkoita sitä, että vastaajat ovat keskimäärin tällaisia, tai erityisen paljon tällaisia, vaan sitä, että tällainen jatkumo on aineistossa olemassa.
+
+Kokeile siis esimerkiksi seuraavia faktorien määriä:
+3 kysymystä: 1 tai 2 faktori
+4 kysymystä: 1 tai 2 faktoria
+5 kysymystä: 1, 2, 3 faktoria
+6+ kysymystä: 2, 3, 4 faktoria
+
+Millä faktorien määrällä faktorit eli ulottuvuudet ovat selkeimmät? Valitse tämä lopulliseksi ratkaisuksi.
+
+
+```{r, rows.print=25}
+# tarkistetaan, että muuttujissa on kaikki kunnossa. Jos on jotain ylimääräistä, alempaa löytyy apu. 
+ESS2023_Suomi |> select(MUUTTUJA1, MUUTTUJA2, MUUTTUJA3, MUUTTUJA4) |> summary()
+
+# kysymysmerkin paikalle sinulle sopiva faktorien määrä (ei muuttujien määrä, vaan joku pienempi luku)
+faktorianalyysi <- fa(ESS2023_Suomi |> select(MUUTTUJA1, MUUTTUJA2, MUUTTUJA3, MUUTTUJA4), nfactors=?, fm="ml", rotate="varimax")
+
+# tehdään suoraan taulukko. Uudelleennimeämisiä pitää olla yhtä monta kuin yllä faktoreita. Tarkkana numeroiden kanssa!
+faktoritaulukko <- tee_faktorianalyysitaulukko(faktorianalyysi) |> rename(UUSI_NIMI1 = ML1)
+# ja tästä tulee sitten tulokset tulkittavaksi.
+faktoritaulukko
+```
+
+Voit tallentaa valmiin taulukon Excel-tiedostona.
+
+```{r}
+write_xlsx(faktoritaulukko, "valmis_taulukko.xlsx")
+```
+
+Tallenna vielä faktoripisteet aineistoon.
+
+```{r}
+# Tähän pitää toistaa uudelleennimeämiset yltä
+faktoripisteet <- faktorianalyysi$scores |> as_tibble() |> rename(UUSINIMI1 = ML2, UUSINIMI2 = ML1)
+
+ESS2023_Suomi <- ESS2023_Suomi |> select(-matches(names(faktoripisteet))) |> bind_cols(faktoripisteet)
+```
+
+Tee ainakin yksi histogrammi faktoripistemuuttujasta tarkistaaksesi, että tämä onnistui. Tätä ei tarvitse raporttiin, mutta ensi viikolla näitä käytetään tulevissa analyyseissa. Jos nimesit faktoripisteet yllä, niin käytä näitä antamiasi nimiä. (Jos et, ML1 jne.)
+
+```{r}
+ggplot(ESS2023_Suomi, aes(x=UUSINIMI1)) +
+  geom_histogram()
+```
+
+## Aineiston tallentaminen 
+
+Omat faktoripistemuuttujat talteen.
+
+```{r}
+write_sav(ESS2023_Suomi, "ESS2023_Suomi_editoitu.sav")
+```

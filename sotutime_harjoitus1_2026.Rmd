@@ -1,0 +1,287 @@
+---
+title: "Harjoitus 1: asennusta & visualisaatiot"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+Tällä viikolla tavoitteena on lähinnä saada ohjelmisto käyttöön sekä aineisto auki. Vähän tutustutaan R-kielen käyttöön samalla.
+
+R asentuu yleensä ensimmäisellä asennuskerralla ongelmitta, mutta valitettavasti päivityksissä tulee usein ongelmia - ja teillä on varmaan JYT-kurssilta versiot asennettuna.
+Tämän harjoituksen alku sekä PDF-tiedostona jaettu "R- ja Rstudio -asennus sekä -päivitys, ohje 2026" yrittävät tehdä asennuksen ja päivityksen mahdollisimman helpoksi.
+Varmaan joillain silti tulee ongelmia, mutta ensimmäisen harjoitussession tarkoituksena on korjata nämä opettajien avulla.
+
+# R- ja Rstudion päivitys
+
+Seuraa "R- ja Rstudio -asennus sekä -päivitys, ohje 2026" -tiedoston kohdat 1-3 ennen kuin jatkat tämän tiedoston kanssa.
+
+# Pakettien asennus
+
+
+Ladataan analyyseissa käytettävät työkalut.
+Harjoitustiedostojen formaatti on sellainen, että ne koostuvat tekstiosioista (valkoisella taustalla) ja koodiosioista (hassujen hipsukoiden välissä harmaalla taustalla).
+
+Ohjelma tunnistaa harmaalla taustalla olevat koodit komennoiksi, ja ne voi suorittaa esimerkiksi valitsemalla haluamansa koodin ja painamalla ctrl-Enter (Macilla command + enter).
+Jos haluaa kokonaisen alueen kaikki koodit, vihreä play-nuoli toimii hyvin.
+
+Voit asentaa paketit joko a) suorittamalla ohjetiedostossa olevat asennuskoodit rivi kerrallaan siirtämällä kursorin oikealla riville ja painamalla Ctrl-Enter (Macilla Command+Enter) b) suorittamalla kaikki asennuskoodit painamalla koodialueen vihreästä play-nuolesta
+
+```{r, echo=F, warning=F}
+install.packages("tidyverse")
+install.packages("forcats")
+install.packages("haven")
+install.packages("janitor")
+install.packages("labelled")
+install.packages("psych")
+install.packages("lm.beta")
+install.packages("broom")
+install.packages("writexl")
+install.packages("pkgbuild")
+install.packages("remotes")
+```
+
+Jos tämän suorittaa kerralla kokonaan, kone surruttelee aika pitkän tovin.
+Osa tekstistä tulee punaisella, mutta siitä huolimatta ei ole välttämättä mitään ongelmaa!
+R antaa erilaisia infotekstejä, varoituksia ja varsinaisia virheilmoituksia aika samannäköisillä teksteillä, mutta virheilmoituksissa on aina jossain kohtaa sana Error.
+
+Jos huomaat sanan Error, joku meni pieleen.
+"R- ja Rstudio -asennus sekä -päivitys, ohje 2024" -tiedoston kohta 5 sisältää yleisimpiä ongelmia korjattavaksi.
+
+Vielä yksi lisäpaketti, joka asennetaan vähän eri tavalla.
+```{r, echo=F, warning=F}
+remotes::install_github("arhot/sostieteidentaulukointityylit")
+```
+
+
+Viimenen paketti on Arhon tekemä "sostieteidentaulukointityylit".
+Kuten nimestä voi ehkä arvata, tarkoituksena on, että paketti tekee sosiaalitieteiden kirjoitusohjeiden mukaiset taulukot.
+Itse taulukot ovat pääpiirteissään American Psychological Associationin 7th editionin ohjeen mukaisia, mutta joiltain osiltaan suomen kieleen paremmin istuvaksi aseteltuja.
+Tämä ei ole (vielä) virallisessa pakettijulkaisussa, joten sen asennus toimii vähän eri tavalla.
+
+Jos tämä kysyy Which would you like to update?
+-kysymyksen, tähän voi valita 1 (all) tai 3 (None), ei ole oikeastaan väliä.
+Jos pyytää asentamaan RTools-ohjelman, niin sitä ei pitäisi tässä tarvita, eli voi kieltäytyä / jatkaa vaan eteenpäin.
+Jos asennus ei toimi, niin sano Arholle, mutta ei ole oikeastaan ainakaan vielä väliä, voit hypätä yli.
+Tässäkin toimivakin suoritus on punaisella, eli jotain tällaista lukee kun toimii "Downloading GitHub repo [arhot/sostieteidentaulukointityylit\@HEAD](mailto:arhot/sostieteidentaulukointityylit@HEAD){.email}", tai "Skipping install.." Näissä ei ole Erroria, joten ei hätää!
+
+# Pakettien lataus käyttöön
+
+Kun paketit on asennettu, ne pitää vielä ladata käyttöön.
+Asennus tehdään vain kerran, mutta lataus tehdään aina kun R:n käynnistää uudestaan.
+Tämä tulee siis olemaan jokaisen harjoitustiedoston alussa.
+
+Näistä ei välttämättä tule mitään ilmoitusta kun ne suorittaa - tämä on ok!
+
+Jos tässä tulee virheilmoitus muotoa Error in library(tiydeverse) : there is no package called 'tidyverse', niin asennus ei ole yllä onnistunut.
+
+Jos tulee muita ilmoituksia, kuten "The following objects are masked from ‘package:stats’: chisq.test, fisher.test", nämä ovat vain ilmoituksia, eikä niistä tarvitse välittää.
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(haven)
+library(janitor)
+library(labelled)
+library(psych)
+library(lm.beta)
+library(broom)
+library(writexl)
+library(sostieteidentaulukointityylit)
+```
+
+# Kurssi-projektin perustaminen sekä aineiston tallentaminen
+
+Fiksuin tapa käyttää R:ää kun kursseja alkaa kertymään on projektin perustaminen jokaiselle kurssille erikseen. Näin tiedostot pysyvät järjestyksessä ja kaikki tulee tallennettua. Tähän on ohjeet tiedostossa Rstudio_projektin_perustaminen.pdf.
+
+Tähän kansioon tallennetaan jatkossa kaikki kurssiin liittyvät omat tiedostot.
+(Myöhemmin kurssilla tulee hankaluuksia, jos tiedostot ovat eri paikoissa, kuten latauskansiossa, joten tehdään heti siihen varautuen.)
+
+Lataa Moodlesta aineistotiedosto ja tallenna se projektikansioo. Oletuksena se ehkä menee Downloads- tai Lataukset -kansioon, mutta käy heti siirtämässä se projektikansioon. 
+
+Jos tuplaklikkaat tiedostoa, niin tietokoneesi yrittää avata tiedostoa SPSS-ohjelmistossa - peruuta tämä. Tiedosto pitää siis vain siirtää oikeaan paikkaan, ja sitten sen voi avata seuraavalla komennolla.
+
+```{r}
+ESS2023_Suomi <- read_sav("ESS2023_Suomi.sav")
+```
+
+Jos tästä tulee virheilmoitus, Error: 'ESS2023_Suomi.sav' does not exist in current working directory, niin
+1) Varmista vielä, että työhakemisto on oikea valitsemalla Session - Set working directory - To source file directory.
+2) Varmista, että aineistotiedosto on oikeassa hakemistossa.
+3) Varmista, että tämä tiedosto (sotutime_harjoitus1_2026.Rmd) on oikeassa kansiossa
+4) Varmista, että aineistotiedoston nimi on oikea. Jos olet vaihtanut tiedoston nimen tai se on automaattisesti vaihtunut (esimerkiksi muotoon ESS2023_Suomi_1_), koodi ei toimi.
+5) Yritä uudestaan suorittaa koodia.
+6) Jos ei vieläkään onnistu, avaa tiedosto valikosta File - Import dataset - from SPSS ja etsi tiedosto sieltä, mihin olet sen tallentanut.
+
+Kun Rstudion ikkunan oikeaan ylänurkkaan Environment-lehdelle ilmestyy ESS2023_Suomi -niminen data, tuominen on onnistunut.
+
+# R, funktiot ja objektit
+
+## Varmistetaan aineiston lataus
+
+Koko aineistoa voi tarkastella klikkaamalla Environment-paneelista aineiston perässä olevaa taulukon kuvaa.
+Tai sitten voi käyttää komentoa, joka tulostaa ensimmäiset vastaajat, alla.
+
+Keskeiset käsitteet R:n käytössä ovat funktiot eli komennot, joilla tehdään asioita objekteille, eli esimerkiksi datalle.
+Komennon tunnistaa sen perässä olevista sulkeista (): tässä siis komento on head(), joka tulostaa ensimmäiset rivit aineistosta.
+Yksi objekti on aineisto eli data.frame, joka koostuu tietysti useista muuttujista ja vastaajista.
+
+Kerrotaan siis R:lle, että haluamme suorittaa komennon head() objektille ESS2023_Suomi.
+
+```{r}
+head(ESS2023_Suomi)
+```
+
+Aineisto koostuu tietysti useammasta muuttujasta, joita jokaista voi käsitellä omana objektinaan.
+Yhteen osaan pääsee käsiksi käyttämällä dollarimerkkiä $ apuna: aineisto$muuttuja johdattaa R:n oikeaan paikkaan.
+a
+Tarkastellaan tänään muuttuujaa A1_min, joka kuvaa uutisten seurantaan käytettyä aikaa.
+Tarkastellaan ja pohditaan mitä tällainen muuttuja pitää sisällään.
+
+Funktio summary() tekee yhteenvedon sille komennettavasta objektista - tällä kertaa ESS2023_Suomi-aineiston muuttujasta a1_min.
+
+```{r}
+summary(ESS2023_Suomi$A1_min)
+```
+
+## Kuvioiden piirtämistä
+
+Loppuharjoitus käytetään kuvioiden piirtämiseen, koska se on tärkein osa tilastoanalyysia.
+Käytetään kuvioissa muuttujaa A1_min.
+
+### Histogrammi
+
+Tehdään ensimmäisenä histogrammi, eli pylväskuvio yhden muuttujan tiedoista.
+
+Komennolla ggplot() määritellään minkälainen kuvio piirretään.
+Komennolle pitää tietysti kertoa mistä data löytyy, ja miten muuttujia sijoitellaan kuvioon.
+Tässä käytetään määritettä aes().
+Nyt halutaan x-akselille A1_min.
+Nyt ei tarvitse enää tässä rimpsussa laittaa uudestaan tuota aineiston nimeä eikä käyttää $-merkkiä.
+Plus-merkin paikka on tärkeä!
+
+Itse kuvan ja sen akselien määrittämisen lisäksi pitää komentaa minkälainen elementti kuvaan lisätään.
+geom_histogram() on tavallinen histogrammi.
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=A1_min)) +
+  geom_histogram()
+```
+
+### Hajontakuvio
+
+Tehdään hajontakuvio (eli jokaisen vastaajan kahden muuttujan arvo merkitään pisteellä), jossa on vaaka-akselilla syntymävuosi ja pystyakselilla A1_min.
+Hajontakuvion saa piirrettyä geom_point() -komennolla.
+Syntymävuosi on aineiston muuttujassa Syntymävuosi.
+
+Kysymysteksti on niin pitkä, että se ei oikein mahdu kuvaan, joten korvataan se lyhyemmällä tähän. Tämän harjoituksen kuvioita ei tarvitse mihinkään tallentaa, joten en nyt jaksa joka kuvaan muuttaa, mutta samalla logiikalla se onnistuu!
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=Syntymävuosi, y=A1_min)) +
+  geom_point() +
+  labs(y="Uutisten seuraaminen, minuutteja")
+```
+
+Tulkitaan kuva.
+Mitä siitä voi lukea?
+Minkälaisia trendejä uutisten seuraamisessa iän myötä on?
+Mistä ne voisivat johtua?
+
+### Uuden muuttujan laskeminen vanhan perusteella
+
+Yllä käytettiin syntymävuotta ja se toimii toki, mutta usein on helpompaa tulkita vain ikää vuosina. Tehdään siis aineistoon uusi Ikä-muuttuja, joka on kyselytekohetki 2023 miinus syntymävuosi (eli kuinka monta vuotta vastaaja oli kyselyvuonna).
+
+Tässä tulee yksi tärkeä uusi logiikka, ladatun aineiston muokkaaminen. Tämä onnistuu rimpsulla ESS2023_Suomi <- ESS2023_Suomi - tässä pitää toistaa aineiston nimi kahteen kertaan, jotta R tietää että haluat muokata tätä samaa etkä esimerkiksi tehdä vähän erilaista kopiota. 
+
+Tämän jälkeen seuraa merkintä |>
+Tämä tarkoittaa "sitten", eli komento jatkuu. Sen voi kirjoittaa tai lisätä koodin pikanäppäimellä Ctrl+Shift+M (Macilla Ctrl+Command+M). Samaa tarkoittaa myös merkintä %>%, jota voi myös käyttää ja pikanäppäin saattaa sen syöttääkin.
+
+Tämän jälkeen tulee komento mutate(), eli nyt tehdään mutaatioita eli muokkauksia. Sen suluissa ensin se, mitä ollaan tekemässä (Ikä), sitten toimitus jonka perusteella se tehdään - nyt vain miinuslasku.
+
+```{r}
+ESS2023_Suomi <- ESS2023_Suomi |> 
+  mutate(Ikä = 2023-Syntymävuosi) 
+```
+
+Tämä ei näytä ruudulle mitään, muokkaa vain ladattua aineistoa. Se ei myöskään tallenna tiedostoon muutosta, vaan tämä katoaa kun suljet Rstudion. Palataan tallentamiseen ensi kerralla!
+
+Tarkistetaan siis heti, että Ikä-muuttuja näyttää järkevältä komennolla summary().
+
+```{r}
+summary(ESS2023_Suomi$Ikä)
+```
+
+### Viivakuvio (eräänlainen)
+
+Otetaan sama asia, mutta piirretään jokaista vastaajaa kuvaavien pisteiden sijasta koko ikäluokkaa kuvaava trendiviiva.
+Ihan samalla tavalla kuin äsken, mutta geom_smooth().
+Smooth on likipitäen ikävuoden keskiarvoa kuvaava viiva, jonka ympärille piirretään vielä 95% luottamusvälit ryhmän keskiarvolle.
+
+Samalla voidaan tarkistaa, että ikä-muuttuja näyttää oikealta.
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=Ikä, y=A1_min)) +
+  geom_smooth() +
+  labs(x="Ikä", y="Uutisten seuraaminen, minuutteja")
+```
+
+Ovatko trendit samanlaisia kuin hajontakuviossa?
+Kumpi kuvioista, hajontakuvio vai viivakuvio, kertoo mielestänne tarinan paremmin?
+Miksi epävarmuus eli luottamusvälit ovat erilaisia eri ikäryhmissä?
+
+### Viivat ja kuviot samassa
+
+Elementtien lisäämisessä kuvioon on ideana se, että yhteen kuvaan voi yhdistää monenlaisia asioita.
+Vaikkapa laittaa molemmat äskeiset tavat kertoa uutisten seuraamisen ja iän trendeistä!
+Huomaa miten pystyakseli muuttuu erilaisissa kuvissa!
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=Ikä, y=A1_min)) +
+  geom_smooth() + geom_point()  +
+  labs(x="Ikä", y="Uutisten seuraaminen, minuutteja")
+```
+
+### Hajontakuvio kolmella muuttujalla
+
+Katsotaan miltä trendit näyttävät, kun huomiodaan myös Sukupuoli.
+
+Aineisto on nyt ladattu siten, että R luulee kaikkien muuttujien olevan jatkuvia - voimme kertoa tämän olevan luokiteltu lisäämällä funktion as_factor().
+Merkitään nyt siis Sukupuoli-muuttujan luokkia eri värisillä pallukoilla.
+
+```{r}
+
+ggplot(data=ESS2023_Suomi, aes(x=Ikä, y=A1_min, color=as_factor(Sukupuoli))) +
+  geom_point()  +
+  labs(x="Ikä", y="Uutisten seuraaminen, minuutteja", color= "Sukupuoli")
+```
+
+Miltä trendit nyt näyttävät?
+
+### Sama viivakuviona
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=Ikä, y=A1_min, color=as_factor(Sukupuoli))) +
+  geom_smooth() +
+  labs(x="Ikä", y="Uutisten seuraaminen, minuutteja", color= "Sukupuoli")
+```
+
+### Mikä muu voisi vaikuttaa?
+
+dgsdf
+
+Miettikää mikä muu tekijä voisi vaikuttaa siihen, miten uutisten seuraaminen iän myötä jakautuu - koodikirjasta löytyy apuja.
+Pidetään siis syntymävuosi ja uutisten seuranta ennallaan, mutta kokeillaan vähän muiden tekijöiden kanssa tarkastelua.
+
+Tähän voi siis vaan kopioida jonkin ylläolevista kuvioista ja vaihtaa viimeisen muuttujan nimen!
+
+1)  Etsi koodikirjasta joku mielenkiintoinen (luokitteleva) muuttuja
+2)  Vaihda sen nimi TAHANOMA tilalle. R:ssä muuttujannimet huomioivat isot ja pienet kirjaimet, eli kun koodikirjassa on vaikka A1_min, se pitää kirjoittaa juuri noin.
+3)  Aja koodi
+
+```{r}
+ggplot(data=ESS2023_Suomi, aes(x=Ikä, y=A1_min, color=as_factor(TAHANOMA))) +
+  geom_point() + geom_smooth() + 
+  labs(x="Ikä", y="Uutisten seuraaminen, minuutteja")
+```
+
+Bonuksena1: vaihda myös muita muuttujia - haluatko tarkastella jotain muuta kuin politiikan seuraamista iän mukaan?
+Bonuksena2: vaihda värin tilalle muoto ja piirrä kuva uudestaan (color ==> shape)
