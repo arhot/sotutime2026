@@ -2,3 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+
+# Aineistot ja sovellus – ei versionhallintaan
+*.sav
+app.R
